@@ -1,0 +1,225 @@
+
+#include <Arduino.h>
+#include <BLE.h>
+#include <BluetoothLock.h>
+#include <btstack.h>
+
+// Callback registration must remain in memory.
+static btstack_packet_callback_registration_t bleHandler;
+
+// Queue received events so the Bluetooth callback
+// does not print or update gameplay directly.
+struct ControllerEvent {
+  uint8_t player;
+  char action;
+  uint8_t sequence;
+};
+
+const int QUEUE_SIZE = 32;
+ControllerEvent events[QUEUE_SIZE];
+
+volatile uint8_t queueHead = 0;
+volatile uint8_t queueTail = 0;
+
+// Track last packet for each player.
+bool sequenceSeen[2] = {false, false};
+uint8_t lastSequence[2] = {0, 0};
+
+// Track current joystick direction.
+char joystick[2] = {'Z', 'Z'};
+
+// Called by BTstack when Bluetooth events arrive.
+void bluetoothCallback(
+    uint8_t packetType,
+    uint16_t channel,
+    uint8_t* packet,
+    uint16_t size) {
+
+  (void)channel;
+  (void)size;
+
+  if (packetType != HCI_EVENT_PACKET) return;
+
+  if (hci_event_packet_get_type(packet) !=
+      GAP_EVENT_ADVERTISING_REPORT) {
+    return;
+  }
+
+  const uint8_t* adv =
+      gap_event_advertising_report_get_data(packet);
+
+  uint8_t length =
+      gap_event_advertising_report_get_data_length(packet);
+
+  // BLE advertising data contains length/type/data
+  // structures. Search for manufacturer data (0xFF).
+  uint8_t pos = 0;
+
+  while (pos < length) {
+    uint8_t fieldLength = adv[pos];
+
+    if (fieldLength == 0) break;
+
+    if (pos + 1 + fieldLength > length) break;
+
+    uint8_t fieldType = adv[pos + 1];
+
+    // Manufacturer data:
+    // FF FF 'A' 'L' player action sequence
+    if (fieldType == 0xFF && fieldLength >= 8) {
+
+      const uint8_t* data = &adv[pos + 2];
+
+      if (data[0] == 0xFF &&
+          data[1] == 0xFF &&
+          data[2] == 'A' &&
+          data[3] == 'L' &&
+          (data[4] == '1' || data[4] == '2')) {
+
+        ControllerEvent event;
+
+        event.player = data[4] - '0';
+        event.action = (char)data[5];
+        event.sequence = data[6];
+
+        // Ignore idle packets.
+        if (event.action != 'I') {
+          uint8_t next =
+              (queueHead + 1) % QUEUE_SIZE;
+
+          // Don't overwrite unread events.
+          if (next != queueTail) {
+            events[queueHead] = event;
+            queueHead = next;
+          }
+        }
+      }
+    }
+
+    pos += fieldLength + 1;
+  }
+}
+
+// Interpret one received controller action.
+void handleAction(uint8_t player, char action) {
+  Serial.print("P");
+  Serial.print(player);
+  Serial.print(" ");
+
+  switch (action) {
+    case 'S':
+      Serial.println("SHAKE");
+      break;
+
+    case 'F':
+      Serial.println("FLICK UP");
+      break;
+
+    case 'L':
+      Serial.println("TILT LEFT");
+      break;
+
+    case 'R':
+      Serial.println("TILT RIGHT");
+      break;
+
+    case 'C':
+      Serial.println("TILT CENTER");
+      break;
+
+    case 'J':
+      joystick[player - 1] = 'J';
+      Serial.println("JOYSTICK LEFT");
+      break;
+
+    case 'K':
+      joystick[player - 1] = 'K';
+      Serial.println("JOYSTICK RIGHT");
+      break;
+
+    case 'U':
+      joystick[player - 1] = 'U';
+      Serial.println("JOYSTICK UP");
+      break;
+
+    case 'D':
+      joystick[player - 1] = 'D';
+      Serial.println("JOYSTICK DOWN");
+      break;
+
+    case 'Z':
+      joystick[player - 1] = 'Z';
+      Serial.println("JOYSTICK CENTER");
+      break;
+
+    case 'B':
+      Serial.println("BUTTON PRESSED");
+      break;
+
+    case 'b':
+      Serial.println("BUTTON RELEASED");
+      break;
+  }
+}
+
+void setup() {
+  Serial.begin(115200);
+  delay(1000);
+
+  Serial.println("AstroLab async BLE receiver starting");
+
+  // Start Bluetooth. Do not call BLE.scan().
+  BLE.begin("AstroLab-Pico");
+
+  // Register our callback and start scanning.
+  {
+    BluetoothLock lock;
+
+    bleHandler.callback = bluetoothCallback;
+    hci_add_event_handler(&bleHandler);
+
+    // Passive scanning:
+    // interval=48, window=48 units of 0.625ms.
+    // Listen continuously during each scan interval.
+    gap_set_scan_params(0, 48, 48, 0);
+
+    gap_start_scan();
+  }
+
+  Serial.println("Continuous BLE scanning started!");
+}
+
+void loop() {
+  // Process received packets without waiting
+  // for a one-second scan to finish.
+
+  ControllerEvent event;
+  bool available = false;
+
+  noInterrupts();
+
+  if (queueTail != queueHead) {
+    event = events[queueTail];
+    queueTail = (queueTail + 1) % QUEUE_SIZE;
+    available = true;
+  }
+
+  interrupts();
+
+  if (available) {
+    int index = event.player - 1;
+
+    // Ignore duplicate broadcasts of an event.
+    if (!sequenceSeen[index] ||
+        lastSequence[index] != event.sequence) {
+
+      sequenceSeen[index] = true;
+      lastSequence[index] = event.sequence;
+
+      handleAction(event.player, event.action);
+    }
+  }
+
+  // Add normal game logic here later.
+  // No blocking BLE.scan(1) call!
+}
