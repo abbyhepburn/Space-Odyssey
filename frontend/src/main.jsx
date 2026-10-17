@@ -1,5 +1,9 @@
 import React from 'react';
-import {createRoot} from 'react-dom/client';
+import { createRoot } from 'react-dom/client';
 import App from './App';
+import FrontendErrorBoundary from './components/FrontendErrorBoundary';
 import './styles.css';
-createRoot(document.getElementById('root')).render(<App/>);
+
+createRoot(document.getElementById('root')).render(
+  <FrontendErrorBoundary><App /></FrontendErrorBoundary>
+);

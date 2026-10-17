@@ -16,6 +16,7 @@ from gemini_missions import generate
 from vision import VisionWorker
 from exploration import Exploration
 from flight_game import FlightGame
+from control_inputs import remote_to_flight
 
 load_dotenv(os.getenv('SPACE_ODYSSEY_ENV', str(Path(__file__).with_name('.env'))))
 
@@ -50,6 +51,10 @@ class Engine:
         else: raise ValueError('Pico is disconnected')
 
     def control(self, command):
+        # Developer can emulate a remote over local WebSocket/API for tests.
+        # The same REMOTE message format is accepted from the Pico USB reader.
+        if command.startswith('REMOTE,'):
+            self.flight.command(remote_to_flight(command),source='remote');return
         if command.startswith("FLIGHT,"):
             self.flight.command(command); return
         if command.startswith(('PLANET,','MISSION_','ACTION,')):
@@ -89,7 +94,7 @@ class Engine:
                 with contextlib.suppress(ValueError):
                     parts=data.split(',')
                     if self.flight.phase=='MISSION' and len(parts)==3:
-                        self.flight.command(f'FLIGHT,{parts[1]},{parts[2]}')
+                        self.flight.command(f'FLIGHT,{parts[1]},{parts[2]}',source='vision')
                     elif self.exploration.outcome=='ACTIVE' and len(parts)==3:
                         self.exploration.action(parts[1], {'DUCK_ON':'DUCK','DUCK_OFF':'DUCK_OFF','JUMP':'JUMP'}.get(parts[2],parts[2]))
                     else: self.send(data)
@@ -107,6 +112,14 @@ class Engine:
                     self.capabilities=caps
                     with contextlib.suppress(ValueError): self.send(f'CAPABILITIES,{int(caps["jump"])},{int(caps["duck"])}')
             elif kind=='line':
+                if data.startswith('REMOTE,'):
+                    # Firmware motion signals and keyboard test controls converge
+                    # on the same authoritative gameplay without separate rules.
+                    try:
+                        self.flight.command(remote_to_flight(data),source='remote')
+                    except ValueError:
+                        self.status['message']='Ignored invalid remote event'
+                    continue
                 event=parse_line(data)
                 if event is None: continue
                 et=event['type']
@@ -173,9 +186,34 @@ async def lifespan(app):
 
 app=FastAPI(title='Space Odyssey',lifespan=lifespan)
 @app.get('/health')
-async def health(): return {'ok':True,**app.state.engine.status}
+async def health():
+    e=app.state.engine
+    return {'ok':True,**e.status,'flight_gemini':e.flight.source or 'NOT GENERATED YET'}
 @app.get('/state')
 async def state(): return app.state.engine.snapshot()
+@app.get('/api/flight/gemini-status')
+async def flight_gemini_status():
+    """Local debugging without exposing the user's key or raw API responses."""
+    import importlib.util
+    try:
+        sdk_available = importlib.util.find_spec('google.genai') is not None
+    except (ImportError, ModuleNotFoundError, ValueError):
+        sdk_available = False
+    game = app.state.engine.flight
+    source = game.source or 'NOT GENERATED YET'
+    return {
+        'api_key_configured': bool(os.getenv('GEMINI_API_KEY', '').strip()),
+        'sdk_installed': sdk_available,
+        'configured_model': os.getenv('GEMINI_MODEL', 'gemini-3.8-flash'),
+        'last_flight_mission_source': source,
+        'generating_now': game.phase == 'GENERATING',
+        'hint': (
+            'No key found in backend/.env; only local games can be generated.'
+            if not os.getenv('GEMINI_API_KEY', '').strip()
+            else 'The API key is configured; generate a planet challenge to check whether it is used.'
+        ),
+    }
+
 @app.post('/api/missions/generate')
 async def missions():
     e=app.state.engine

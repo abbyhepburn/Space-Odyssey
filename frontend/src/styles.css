@@ -6,3 +6,98 @@
 @media(max-width:600px){.simple-header{padding:10px 12px;height:65px}.simple-header>strong{font-size:16px;letter-spacing:2px}.simple-header button{padding:7px;font-size:11px}.simple-header>div:last-child{gap:5px}.header-score{left:47%;font-size:8px;gap:5px}.header-score b{font-size:22px}.start-card{padding:23px 20px;top:48%}.start-card h1{font-size:35px}.crew-lessons{gap:12px}.crew-lessons b{font-size:9px}.crew-lessons p{font-size:11px}.crew-lessons kbd{font-size:11px;padding:3px 5px;min-width:20px}.start-card .big-button{font-size:17px}.movement-demo>strong{font-size:18px}.nav-status{top:20%}.nav-status>span{font-size:8px}.nav-status strong{font-size:29px}.attitude-gauge{top:20%;width:95px}.attitude-gauge>span{font-size:8px}.attitude-gauge>div{height:45px;margin-top:9px}.attitude-gauge b{top:14px;font-size:13px}.nav-aim{top:42%}.nav-aim>span{width:65px;height:65px;font-size:35px}.nav-aim b{font-size:13px}.nav-aim small{font-size:10px}.nav-prompt{top:57%;width:90%}.nav-prompt p{font-size:14px}.big-button{font-size:16px;padding:12px 19px;gap:15px}.flight-buttons{bottom:6%;left:3%;right:3%;gap:8px}.flight-buttons>div{padding:8px;gap:4px}.flight-buttons button{font-size:9px;padding:10px 6px}.destination-tags>span{font-size:7px;transform:translate(-50%,65px)}.game-briefing{padding:20px;max-height:82%}.brief-title h1{font-size:32px}.brief-title p{font-size:13px}.brief-title>span{font-size:9px}.lesson-layout{gap:12px;margin-top:18px;grid-template-columns:.8fr 1.2fr}.lesson-preview{padding:10px}.lesson-controls h2{font-size:19px}.control-lesson>strong{font-size:16px}.control-lesson p{font-size:12px}.control-lesson>div{gap:5px;flex-wrap:wrap}.control-lesson kbd{font-size:11px;padding:3px 5px;min-width:25px}.control-lesson span{font-size:9px}.watch-label{display:none}.sync-lesson{padding:8px}.sync-lesson>span,.sync-lesson p{font-size:11px}.sync-lesson kbd{font-size:11px}.brief-actions{gap:10px;margin-top:17px;padding-top:15px}.brief-actions>button{font-size:12px;padding:10px}.brief-actions kbd{display:none}.source-note{font-size:8px}.simple-actions{bottom:10px;flex-wrap:wrap;justify-content:center;width:96%;gap:6px}.simple-actions>div{padding:7px;gap:7px}.simple-actions .small svg{display:none}.movement-demo.small{width:auto}.movement-demo.small>strong{font-size:12px;min-width:32px}.sync-action{min-width:0;flex-direction:row!important;width:100%;gap:10px!important}.sync-action b{font-size:12px}.simple-actions span{font-size:9px}.simple-actions button{font-size:10px;padding:6px 8px}.simple-actions>div>div:last-child{gap:5px}.mission-top{top:77px;max-width:70%;padding:8px 15px}.mission-top>span{font-size:13px}.mission-top>b{font-size:28px}.team-health{width:100px}.player-badge{top:82px;left:8px;font-size:8px;padding:6px 9px}.game-feedback{top:25%;font-size:14px;width:90%}.results-card{padding:25px}.results-card h1{font-size:36px}.results-card>div{gap:10px}.results-card>div button{font-size:13px;padding:12px}.travel-title{width:90%;padding:24px}.travel-title h1{font-size:44px}.travel-title p{font-size:13px}.help-card{padding:25px}.help-card h1{font-size:32px}}
 
 .discovery-card{position:absolute;right:3%;top:19%;width:340px;max-width:90%;padding:25px;background:#0b1b2af2;border:1px solid #6e8b9c;border-radius:12px;box-shadow:0 18px 60px #0009;z-index:8}.discovery-card>span{font-size:10px;letter-spacing:2px;color:#a9c5d5}.discovery-card h2{font-size:25px;margin:12px 20px 12px 0}.discovery-card p{font-size:16px;line-height:1.6;color:#d0dce4}.discovery-card a{display:inline-block;margin-top:15px;color:#b7d6e6}.discovery-card small{display:block;color:#8298a9;font-size:10px;margin-top:15px}.press-pulse{animation:buttonpress 1.4s infinite}@keyframes buttonpress{50%{fill:#e7c88f;stroke:#e7c88f;stroke-width:8}}.flight-buttons{left:5%;right:5%}.simple-actions>div>div:last-child{flex-wrap:wrap;justify-content:center}.nav-prompt{top:63%}
+
+/* First-person planetary expedition HUD. Stays clear of the center of both views. */
+.surface-location{position:absolute;top:90px;left:24px;z-index:4;display:flex;flex-direction:column;gap:3px;border-left:3px solid #f5c28a;padding:9px 15px;background:#08101eae;letter-spacing:2px;font-size:12px;pointer-events:none}
+.surface-location strong{color:#ffdda9}.surface-location span{font-size:10px;color:#d5e0e5}
+.surface-objectives{position:absolute;top:145px;left:18px;right:18px;display:flex;z-index:3;justify-content:space-around;pointer-events:none;gap:20px}
+.surface-objectives>div{display:flex;flex-direction:column;gap:3px;padding:8px 13px;border-radius:7px;background:#0c1723ae;border:1px solid #e6c5a045;min-width:135px}
+.surface-objectives strong{font-size:10px;letter-spacing:1.2px;color:#ddcbad}.surface-objectives span{font:700 13px 'Barlow Condensed',sans-serif;letter-spacing:1.5px;color:#fff1d2}
+.remote-flick{transform-origin:80px 100px;animation:remoteFlick 1.4s ease-in-out infinite}
+@keyframes remoteFlick{0%,25%,80%,100%{transform:rotate(0deg) translateY(0)}40%,65%{transform:rotate(-23deg) translateY(-12px)}}
+@media(max-width:720px){.surface-location{top:70px;left:10px;padding:5px 9px;font-size:9px}.surface-objectives{top:114px;left:7px;right:7px}.surface-objectives>div{min-width:0;padding:5px 8px}.surface-objectives strong{font-size:8px}.surface-objectives span{font-size:11px}}
+
+/* Individual competitive scoring and short educational briefing. */
+.player-scoreboard{display:flex;gap:1.2rem;align-items:center;font-variant-numeric:tabular-nums}
+.player-scoreboard span{display:flex;gap:.55rem;align-items:baseline;color:#e6e6e5;font-size:.86rem;letter-spacing:.12em}
+.player-scoreboard span:first-child b{color:#e7bd71}.player-scoreboard span:last-child b{color:#a6c7f5}
+.planet-lesson{background:linear-gradient(115deg,rgba(20,35,53,.91),rgba(43,34,52,.88));border:1px solid rgba(224,184,118,.38);border-radius:12px;padding:1rem 1.1rem;margin-top:.9rem;max-width:670px;text-align:left}
+.planet-lesson span{font-size:.75rem;letter-spacing:.18em;color:#eac68d;font-weight:700}
+.planet-lesson p{font-size:.98rem;line-height:1.5;color:#f6eada;margin:.5rem 0}
+.planet-lesson small{display:block;color:#c7cbd5;line-height:1.5}
+.planet-lesson a{display:inline-block;color:#ecd3a0;font-size:.78rem;margin-top:.5rem}
+.versus-result{display:flex;align-items:center;justify-content:space-evenly;gap:1.5rem;margin:1.5rem auto}
+.versus-result>div{display:flex;flex-direction:column;align-items:center;gap:.3rem}
+.versus-result strong{font-size:clamp(2.4rem,6vw,4rem);line-height:1.1}
+.versus-result>div:first-child strong{color:#e7bd71}.versus-result>div:last-child strong{color:#a6c7f5}
+.versus-result span,.versus-result small{font-size:.78rem;letter-spacing:.15em}
+.versus-result>b{color:#a3a9bd;font-size:.9rem;letter-spacing:.2em}
+.team-health{display:flex;gap:3px}.team-health i{flex:1;height:100%;max-width:50%;border-radius:2px}.team-health i:nth-child(2){background:#85ace1}
+
+/* Browsable encyclopedia ensures distant nebulae and galaxies can be selected
+   without pretending they are physically near the spaceship. */
+.catalog-open{position:absolute;top:5.3rem;left:1.2rem;z-index:10;background:#171f31e6;border:1px solid #bca27685;color:#f2dfbb;border-radius:.5rem;letter-spacing:.1em;padding:.65rem .9rem;cursor:pointer}
+.catalog-panel{position:absolute;z-index:32;left:1rem;top:6.6rem;bottom:1rem;width:min(350px,calc(100vw - 2rem));border-radius:1rem;border:1px solid #bca27690;background:#0c1522f5;box-shadow:0 24px 100px #000a;padding:1rem;color:#e8eaf0;display:flex;flex-direction:column;gap:.65rem}
+.catalog-panel .catalog-head{display:flex;align-items:center;justify-content:space-between;letter-spacing:.11em;color:#f4d39a}
+.catalog-head button{font-size:1.3rem;border:0;background:transparent;color:#ffebc9;cursor:pointer}
+.catalog-panel p,.catalog-panel>small{font-size:.8rem;line-height:1.4;color:#b7bfcc;margin:.1rem 0}
+.catalog-items{overflow-y:auto;min-height:0;display:grid;grid-template-columns:1fr;gap:.35rem;padding-right:.35rem}
+.catalog-items button{display:flex;flex-direction:column;text-align:left;gap:.17rem;background:#1e2d42;border:1px solid #7089a740;color:#f0edf0;border-radius:.5rem;padding:.5rem .65rem;cursor:pointer}
+.catalog-items button:hover,.catalog-items button:focus-visible{border-color:#c49b63;background:#29354a}
+.catalog-items small{color:#bfc3d2;font-size:.7rem}
+.discovery-card ul{text-align:left;line-height:1.5;color:#d2d8e5;font-size:.85rem;padding-left:1.3rem}.discovery-card li{margin:.4rem 0}
+
+.preflight-discovery{border-top:1px solid #a7a59b66;padding-top:.7rem;flex:0 0 auto}.preflight-discovery p{line-height:1.45;font-size:.86rem;color:#e2e4e8}.preflight-discovery a{color:#f0ce91;font-size:.8rem}
+
+/* Mission layout rules must be understandable before the 15-second round starts. */
+.variation-label{font-size:.79rem;letter-spacing:.045em;color:#eed6aa;background:rgba(44,48,68,.75);border:1px solid rgba(211,179,116,.32);border-radius:9px;padding:.55rem .85rem;max-width:36rem;margin:.75rem auto 0}
+
+/* Live thrust feedback: same authoritative value the flight backend uses. */
+.nav-status .thrust-meter{width:100%;max-width:180px;height:8px;background:rgba(6,12,22,.85);border:1px solid #8a9db36b;border-radius:10px;margin-top:9px;overflow:hidden}
+.nav-status .thrust-meter i{height:100%;display:block;background:linear-gradient(90deg,#d18543,#f5d49d);border-radius:10px;transition:width .1s linear}
+.nav-status .thrust-guide{display:block;margin-top:5px;color:#d4c9b2;font-size:10px;letter-spacing:1px}
+.nav-status.thrust-engaged>span{color:#f8cb87}
+.flight-buttons button.thrust-pressed,.flight-buttons button[aria-pressed="true"]{background:linear-gradient(110deg,#88451e,#bd7533);border-color:#f7c17b;color:#fff8e8;box-shadow:0 0 28px #f08c3f88;transform:translateY(1px)}
+@media(max-width:600px){.nav-status .thrust-meter{height:6px}.nav-status .thrust-guide{font-size:8px;letter-spacing:0}}
+
+/* Location-first educational cards: explicit planet/orbit context. */
+.discovery-location{margin:12px 0 16px;padding:12px 14px;border-radius:10px;border:1px solid #c3a36f77;background:#1c2738b8;}
+.discovery-location strong{font-size:11px;letter-spacing:.12em;color:#f0cb90;}
+.discovery-location p{margin:5px 0 0;font-size:14px;line-height:1.5;color:#f0e5d4;}
+.preflight-discovery strong{color:#eed19d;}
+
+/* More buttons can sit on the briefing bar when ground games are available. */
+.brief-actions{flex-wrap:wrap;justify-content:space-between;}
+.results-card>div{flex-wrap:wrap;}
+
+/* Physical remote instructions are the default. Keyboard testing stays off-screen
+   and can be enabled explicitly with ?debugControls=1 on a development laptop. */
+.mission-motion-hints{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);display:flex;align-items:center;justify-content:center;gap:10px;max-width:92%;pointer-events:none;z-index:3}
+.mission-motion-hints>div{display:flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid #91a6bc50;border-radius:10px;background:#091827e0;color:#e7e4d9;font-size:12px;line-height:1.2}
+.mission-motion-hints .movement-demo.small{width:48px;flex:0 0 48px}
+.mission-motion-hints .movement-demo.small svg{width:48px;height:auto}
+.mission-motion-hints .movement-demo.small strong{display:none}
+.mission-motion-hints .mission-sync-hint{color:#f0c987;border-color:#bda4776b;font-weight:700;white-space:nowrap}
+.debug-actions{bottom:118px}
+.remote-action-label{color:#e4cda5;font-size:13px;font-weight:600;letter-spacing:.03em;margin-top:8px}
+.remote-tag{display:inline-block;font-size:10px;letter-spacing:.08em;color:#efcf99;margin-left:12px;white-space:nowrap}
+.nav-status .thrust-meter.reverse i{background:linear-gradient(90deg,#729ac1,#b5cdec)}
+@media(max-width:680px){.mission-motion-hints{bottom:7px;gap:4px;max-width:98%}.mission-motion-hints>div{font-size:9px;padding:5px}.mission-motion-hints .movement-demo.small{display:none}.remote-tag{font-size:8px}}
+
+
+/* Science-showdown rounds: actual multiple-choice gameplay, not obstacle lanes.
+   Both players see the question; each has independent joystick selection and score. */
+.science-quiz-overlay{position:absolute;left:1.2%;right:1.2%;top:26%;bottom:17%;z-index:7;pointer-events:none;display:grid;grid-template-columns:1fr 1fr;gap:1.5%;}
+.science-quiz-player{min-width:0;display:flex;flex-direction:column;gap:1rem;border:1px solid #e0b9787f;background:linear-gradient(155deg,rgba(7,17,32,.95),rgba(16,26,48,.93));border-radius:18px;padding:clamp(12px,2vw,26px);box-shadow:0 14px 55px #000b;}
+.science-quiz-player.p2{border-color:#7ea3de7f;background:linear-gradient(155deg,rgba(9,17,35,.95),rgba(18,28,50,.93));}
+.quiz-overline{font-size:clamp(10px,1vw,13px);color:#f0c68b;font-weight:800;letter-spacing:.15em;}
+.science-quiz-player.p2 .quiz-overline{color:#a6c8ff;}
+.science-quiz-player h2{font-size:clamp(18px,2vw,30px);font-weight:700;line-height:1.17;margin:0;min-height:2.4em;}
+.quiz-answers{display:flex;flex-direction:column;justify-content:center;gap:8px;flex:1;min-height:0;}
+.quiz-answer{display:flex;gap:14px;align-items:center;padding:clamp(9px,1.1vw,14px);border:1px solid #62738b5d;border-radius:11px;background:#19263c99;font-size:clamp(12px,1.15vw,18px);transition:border .1s,background .1s;}
+.quiz-answer>b{display:grid;place-items:center;width:29px;height:29px;border-radius:7px;background:#334863;color:#dfe8f3;flex:0 0 29px;}
+.quiz-answer.selected{border:2px solid #f4c77b;background:#6b4a2055;box-shadow:inset 0 0 25px #e2a85217;}
+.science-quiz-player.p2 .quiz-answer.selected{border-color:#9fc9ff;background:#38669c55;}
+.quiz-answer.answered{opacity:.72;}
+.quiz-foot{font-size:clamp(10px,1vw,13px);color:#d5d5d7;text-align:center;}
+@media(max-width:850px){.science-quiz-overlay{top:23%;bottom:19%;gap:8px;left:8px;right:8px}.science-quiz-player{gap:8px;padding:10px}.science-quiz-player h2{font-size:16px}.quiz-answer{font-size:11px;padding:6px;gap:5px}.quiz-foot{font-size:10px}}
