@@ -1,2 +1,0 @@
-import React from 'react';
-export default function Scoreboard({state,send}){return <div className="result"><span className="eyebrow">EXPEDITION COMPLETE</span><h1>{state.winner==='TIE'?'A stellar tie.':`${state.winner==='P1'?'Orion':'Nova'} takes the rings.`}</h1><p>Orion · {state.p1_distance} m / {state.score1} pts &nbsp; Nova · {state.p2_distance} m / {state.score2} pts</p><button onClick={()=>send('RESET')}>Fly again ↗</button></div>}

@@ -1,2 +1,0 @@
-export const initialState={phase:'CUTSCENE',planet:'TRANSIT',p1_distance:0,p2_distance:0,p1_pose:'NORMAL',p2_pose:'NORMAL',score1:0,score2:0,mission_id:'NONE',progress1:0,progress2:0,winner:'NONE',elapsed_ms:0};
-export function input(player,action){if(!['P1','P2'].includes(player)||!['RUN','JUMP','DUCK_ON','DUCK_OFF'].includes(action))throw Error('Invalid input');return `INPUT,${player},${action}`;}
