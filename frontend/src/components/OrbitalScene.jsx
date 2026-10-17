@@ -2,7 +2,7 @@ import React,{useMemo,useRef} from 'react';
 import {Canvas,useFrame} from '@react-three/fiber';
 import * as THREE from 'three';
 export const vertex=`varying vec3 vNormal;varying vec3 vWorld;varying vec3 vLocal;void main(){vLocal=position;vNormal=normalize(mat3(modelMatrix)*normal);vWorld=(modelMatrix*vec4(position,1.)).xyz;gl_Position=projectionMatrix*viewMatrix*vec4(vWorld,1.);}`;
-const noise=`float hash(vec3 p){p=fract(p*.3183099+vec3(.1,.2,.3));p*=17.;return fract(p.x*p.y*p.z*(p.x+p.y+p.z));}float noise(vec3 x){vec3 i=floor(x),f=fract(x);f=f*f*(3.-2.*f);return mix(mix(mix(hash(i),hash(i+vec3(1,0,0)),f.x),mix(hash(i+vec3(0,1,0)),hash(i+vec3(1,1,0)),f.x),f.y),mix(mix(hash(i+vec3(0,0,1)),hash(i+vec3(1,0,1)),f.x),mix(hash(i+vec3(0,1,1)),hash(i+vec3(1)),f.x),f.y),f.z);}float fbm(vec3 p){float v=0.,a=.5;for(int i=0;i<6;i++){v+=a*noise(p);p=p*2.07+3.1;a*=.5;}return v;}`;
+export const noise=`float hash(vec3 p){p=fract(p*.3183099+vec3(.1,.2,.3));p*=17.;return fract(p.x*p.y*p.z*(p.x+p.y+p.z));}float noise(vec3 x){vec3 i=floor(x),f=fract(x);f=f*f*(3.-2.*f);return mix(mix(mix(hash(i),hash(i+vec3(1,0,0)),f.x),mix(hash(i+vec3(0,1,0)),hash(i+vec3(1,1,0)),f.x),f.y),mix(mix(hash(i+vec3(0,0,1)),hash(i+vec3(1,0,1)),f.x),mix(hash(i+vec3(0,1,1)),hash(i+vec3(1)),f.x),f.y),f.z);}float fbm(vec3 p){float v=0.,a=.5;for(int i=0;i<6;i++){v+=a*noise(p);p=p*2.07+3.1;a*=.5;}return v;}`;
 export const surface=`uniform float uPlanet;uniform float uTime;varying vec3 vNormal;varying vec3 vWorld;varying vec3 vLocal;${noise}
 void main(){vec3 p=normalize(vLocal);float n=fbm(p*8.);float fine=fbm(p*65.);vec3 c=vec3(.5);float lat=p.y;
 if(uPlanet<.5){c=mix(vec3(.16,.145,.13),vec3(.56,.53,.48),n);float cr=pow(abs(sin(fine*44.)),14.);c-=cr*.08;}

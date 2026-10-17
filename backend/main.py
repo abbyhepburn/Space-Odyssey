@@ -17,7 +17,7 @@ from vision import VisionWorker
 from exploration import Exploration
 from flight_game import FlightGame
 
-load_dotenv(Path(__file__).with_name('.env'))
+load_dotenv(os.getenv('SPACE_ODYSSEY_ENV', str(Path(__file__).with_name('.env'))))
 
 class Control(BaseModel):
     command: str
@@ -139,8 +139,6 @@ class Engine:
             if self.pending and now>self.pending['deadline']:
                 self.pending=None; self.status['message']='Mission acknowledgement timed out'; self.retry_at=now+5
             # The authority must clear mission_id before another mission can be requested.
-            if False and self.state['phase']=='RACE' and self.state['mission_id']=='NONE' and not self.active and not self.pending and now>=self.retry_at and self.status['usb']:
-                self.launch_mission()
             payload=self.snapshot()
             async def deliver(ws):
                 try: await asyncio.wait_for(ws.send_json(payload),timeout=.2)
