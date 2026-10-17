@@ -1,3 +1,4 @@
+from vision_route import router as vision_router, expire_camera
 """Thread callbacks -> asyncio queue -> authority -> parsed snapshots -> WebSockets."""
 import asyncio
 import contextlib
@@ -145,6 +146,7 @@ class Engine:
         while True:
             await asyncio.sleep(.05); now=time.monotonic()
             self.flight.tick(now-last)
+            expire_camera(self,now)
             if self.sim:
                 for line in self.sim.tick(max(1,round((now-last)*1000))): self.submit('line',line)
             last=now
@@ -185,6 +187,7 @@ async def lifespan(app):
     await app.state.engine.close()
 
 app=FastAPI(title='Space Odyssey',lifespan=lifespan)
+app.include_router(vision_router)
 @app.get('/health')
 async def health():
     e=app.state.engine
