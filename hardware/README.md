@@ -1,5 +1,12 @@
 # Matching ESP32 → Pico 2 W → laptop firmware
 
+**October 18 update:** [../UPDATE_2026-10-18.md](../UPDATE_2026-10-18.md)
+has the current flashing/setup and verification status. Current sketches use a
+2.5 m/s² flick threshold (0.8 release), 12° tilt entry (7° release), sensor retry
+and 23-byte MPU telemetry. Reflash all three boards. Historical build-success
+claims below refer to the earlier branch revision, not these modified sketches.
+Camera controls now live in Controller setup; the bottom camera tab is removed.
+
 Flash **all three** sketches from this revision together. The game runs on the laptop/Render; the Pico receives BLE advertisements and forwards normalized USB input. These are BLE manufacturer broadcasts, not Bluetooth HID devices: do not pair the remotes in macOS Bluetooth settings.
 
 ## What was broken

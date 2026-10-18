@@ -320,7 +320,7 @@ class FlightGame:
     def reset(self):
         if self.task:self.task.cancel()
         self.generation+=1;self.phase='READY';self.age=0.;self.world_time=0.;self.planet=None;self.mission=None;self.source='';self.education=None
-        self.planet_results={};self.visited=[];self.mpu=[None,None]
+        self.planet_results={};self.visited=[];self.mpu=[None,None];self.ui_blocked=False
         self.players=[dict(x=0.,y=0.,yaw=0.,pitch=0.,distance=0.,health=100,score=0,jump=0.,flick=0.,duck=False,samples=0,chargers=0,selection=1) for _ in range(2)]
         # Separate sources: the browser sends neutral keyboard axes every 50 ms.
         # A live physical remote must never be overwritten by those idle packets.
@@ -332,7 +332,7 @@ class FlightGame:
         self.last_actions=[{},{}];self.sync_timestamps={};self.last_sync=-10.
         self.duck_sources=[set(),set()];self.jump_at=[-100.,-100.];self.flick_at=[-100.,-100.];self.total_scores=[0,0]
         self.ship=[-15.,14.,-120.];self.roll=0.;self.speed=0.;self.thrust_blocked=False;self.travel=0.;self.team_score=0;self.health=100;self.boost=0.;self.boost_cooldown=0.;self.sync_effect=''
-        self.inspected=None;self.transfer_from=[0.,0.,0.];self.obstacles=[];self.winner='NONE';self.event='READY';self.event_id=0;self.damage_flash=0.
+        self.inspected=None;self.inspection_id=0;self.transfer_from=[0.,0.,0.];self.obstacles=[];self.winner='NONE';self.event='READY';self.event_id=0;self.damage_flash=0.
     def emit(self,text):self.event=text;self.event_id+=1
     def transition(self,phase):self.phase=phase;self.age=0.
     def targets(self):
@@ -361,6 +361,7 @@ class FlightGame:
         # Prefer physical controller readings while their data is fresh.
         # If disconnected, both devices safely decay to neutral after 0.4 s;
         # keyboard control remains available for testing/fallback.
+        if self.ui_blocked:return [[0.,0.],[0.,0.]]
         result=[]
         for i in range(2):
             if self.world_time-self.remote_input_at[i]<.4:
@@ -392,7 +393,8 @@ class FlightGame:
                 dest=next((t for t in DESTINATIONS if t[0]==self.planet),None)
                 if dest:self.ship=[dest[1],dest[2],dest[3]+65]
                 for p in self.players:p['yaw']=math.pi;p['pitch']=0.
-                self.duck_sources=[set(),set()];self.roll=0.
+                self.duck_sources=[set(),set()];self.roll=0.;self.inspected=None
+                for p in self.players:p.update(duck=False,jump=0.,flick=0.)
                 self.mission=None;self.speed=0.;self.axes=[[0.,0.],[0.,0.]];self.input_at=[-10.,-10.]
                 self.remote_axes=[[0.,0.],[0.,0.]];self.remote_input_at=[-10.,-10.];self.remote_tilt=[None,None]
                 self.transition('NAVIGATION')
@@ -455,12 +457,13 @@ class FlightGame:
         if action=='SELECT':
             if self.phase=='MISSION':action='PRESS'
         if action=='SELECT':
-            if i!=0:return
+            # Either player's button can continue or leave a menu.
+            if i!=0 and self.phase=='NAVIGATION':return
             if self.phase=='READY':self.command('FLIGHT,LAUNCH')
             elif self.phase=='NAVIGATION':
                 selected=self.selection()
                 if selected and selected['kind']=='discovery':
-                    self.inspected=selected['id'];self.emit('INSPECT '+selected['name']);return
+                    self.inspected=selected['id'];self.inspection_id+=1;self.emit('INSPECT '+selected['name']);return
                 planet=self.target()
                 if planet:
                     self.planet=planet;self.transfer_from=list(self.ship);self.transition('TRAVEL');self.emit(f'{planet} LOCKED')
@@ -695,6 +698,7 @@ class FlightGame:
             self.total_scores=[total+p['score'] for total,p in zip(self.total_scores,self.players)]
             if self.planet not in self.planet_results:
                 self.planet_results[self.planet]={'scores':list(scores),'winner':self.winner}
+            if self.planet not in self.visited:self.visited.append(self.planet)
             self.transition('RESULTS')
             self.emit('PLAYER 1 WINS!' if self.winner=='P1' else 'PLAYER 2 WINS!' if self.winner=='P2' else 'IT’S A TIE!')
     def controller_snapshot(self):
@@ -703,7 +707,7 @@ class FlightGame:
         for i in range(2):
             age=max(0.,self.world_time-self.remote_input_at[i]);fresh=age<.4
             event=self.remote_events[i]
-            rows.append(dict(player=f'P{i+1}',raw=self.remote_raw[i],axes=self.remote_axes[i],tilt=self.remote_tilt[i],effective=active[i],fresh=fresh,age_ms=round(age*1000) if self.remote_packets[i] else None,packets=self.remote_packets[i],source='REMOTE' if fresh else 'KEYBOARD' if self.world_time-self.input_at[i]<.4 else 'NONE',last_action=event['action'] if event else None,action_age_ms=round((self.world_time-event['at'])*1000) if event else None,signs=self.controller_signs[i],mpu=self.mpu[i]))
+            rows.append(dict(player=f'P{i+1}',raw=self.remote_raw[i],axes=self.remote_axes[i],tilt=self.remote_tilt[i],effective=active[i],fresh=fresh,age_ms=round(age*1000) if self.remote_packets[i] else None,packets=self.remote_packets[i],source='REMOTE' if fresh else 'KEYBOARD' if self.world_time-self.input_at[i]<.4 else 'NONE',last_action=event['action'] if event else None,action_age_ms=round((self.world_time-event['at'])*1000) if event else None,signs=self.controller_signs[i],mpu={**self.mpu[i],'fresh':self.world_time-self.mpu[i]['at']<.5,'age_ms':round((self.world_time-self.mpu[i]['at'])*1000)} if self.mpu[i] else None))
         return rows
 
     def snapshot(self):
@@ -712,4 +716,4 @@ class FlightGame:
             education['why']=MODE_LESSONS[self.mission.game_type]
         thrust=self.active_axes()[0][0] if self.phase=='NAVIGATION' else 0.
         quiz=next(({'id':o['id'],'question':o['question'],'choices':o['choices'],'explanation':o['explanation'],'answered':list(o['passed'])} for o in self.obstacles if o['kind']=='QUESTION' and o['event_at']<=self.age<o['event_at']+2.3),None) if self.mission and self.mission.game_type=='SCIENCE_QUIZ' else None
-        return dict(planet_results=self.planet_results,visited=self.visited,expedition_wins=[sum(r['winner']==p for r in self.planet_results.values()) for p in ('P1','P2')],expedition_complete=len(self.planet_results)==len(DESTINATIONS),jump_scale=min(1.25,1.+max(0.,{'JUPITER':2.53,'SATURN':1.065,'NEPTUNE':1.14}.get(self.planet,1.)-1.)*.15),controllers=self.controller_snapshot(),selection=self.selection() if self.phase=='NAVIGATION' else None,inspected=self.inspected,timing=timing_snapshot(),total_scores=self.total_scores,quiz=quiz,thrust_input=max(0.,thrust),reverse_input=max(0.,-thrust),throttle_input=thrust,thrust_blocked=self.thrust_blocked,ship=self.ship,team_score=self.team_score,health=self.health,boost=self.boost,boost_cooldown=self.boost_cooldown,damage_flash=self.damage_flash,roll=round(self.roll,4),speed=round(self.speed,1),travel=round(self.travel,2),phase=self.phase,age=round(self.age,2),planet=self.planet,players=self.players,targets=self.targets(),locked=[self.target(),self.target()],mission=self.mission.model_dump() if self.mission else None,source=self.source,obstacles=[{k:v for k,v in o.items() if k!='answer'} for o in self.obstacles],winner=self.winner,event=self.event,event_id=self.event_id,sync_ready=self.boost_cooldown<=0,sync_window_s=.8,education=education or None,sync_effect=self.sync_effect,authority='SIMULATOR / KEYBOARD' if self.simulated else 'PICO / COMPUTER')
+        return dict(planet_results=self.planet_results,visited=self.visited,expedition_wins=[sum(r['winner']==p for r in self.planet_results.values()) for p in ('P1','P2')],expedition_complete=len(self.planet_results)==len(DESTINATIONS),jump_scale=min(1.25,1.+max(0.,{'JUPITER':2.53,'SATURN':1.065,'NEPTUNE':1.14}.get(self.planet,1.)-1.)*.15),controllers=self.controller_snapshot(),selection=self.selection() if self.phase=='NAVIGATION' else None,inspected=self.inspected,inspection_id=self.inspection_id,timing=timing_snapshot(),total_scores=self.total_scores,quiz=quiz,thrust_input=max(0.,thrust),reverse_input=max(0.,-thrust),throttle_input=thrust,thrust_blocked=self.thrust_blocked,ship=self.ship,team_score=self.team_score,health=self.health,boost=self.boost,boost_cooldown=self.boost_cooldown,damage_flash=self.damage_flash,roll=round(self.roll,4),speed=round(self.speed,1),travel=round(self.travel,2),phase=self.phase,age=round(self.age,2),planet=self.planet,players=self.players,targets=self.targets(),locked=[self.target(),self.target()],mission=self.mission.model_dump() if self.mission else None,source=self.source,obstacles=[{k:v for k,v in o.items() if k!='answer'} for o in self.obstacles],winner=self.winner,event=self.event,event_id=self.event_id,sync_ready=self.boost_cooldown<=0,sync_window_s=.8,education=education or None,sync_effect=self.sync_effect,authority='SIMULATOR / KEYBOARD' if self.simulated else 'PICO / COMPUTER')

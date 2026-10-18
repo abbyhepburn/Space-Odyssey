@@ -38,9 +38,10 @@ class Engine:
         self.status={'usb':self.simulated,'mode':'SIMULATOR' if self.simulated else 'PICO USB','vision':'Remote controls ready','gemini':'Local mission catalog','message':''}
         self.active=None; self.pending=None; self.mission_index=0; self.generating=False; self.epoch=0; self.last_state=0
         self.retry_at=0; self.mission_task=None
+        self.ui_context_until=0.; self.ui_modal=False; self.ui_presses=[0,0]
 
     def snapshot(self):
-        return {'type':'snapshot','state':self.state,'mission':self.active,'pending':bool(self.pending) or self.generating,'status':self.status,'capabilities':self.capabilities,'exploration':self.exploration.snapshot(),'flight':self.flight.snapshot()}
+        return {'type':'snapshot','state':self.state,'mission':self.active,'pending':bool(self.pending) or self.generating,'status':self.status,'capabilities':self.capabilities,'exploration':self.exploration.snapshot(),'flight':{**self.flight.snapshot(),'ui_presses':list(self.ui_presses)}}
 
     def submit(self, kind, data):
         if os.getenv('SPACE_ODYSSEY_HOST_URL') and kind in ('line','input'):
@@ -55,7 +56,23 @@ class Engine:
         elif self.bridge and self.status['usb']: self.bridge.send(command)
         else: raise ValueError('Pico is disconnected')
 
+    def remote_control(self, line):
+        command=remote_to_flight(line)
+        parts=command.split(',');i=int(parts[1][1])-1
+        ui_live=time.monotonic()<self.ui_context_until
+        if parts[2]=='SELECT' and ui_live and (self.flight.phase!='MISSION' or self.ui_modal):
+            self.ui_presses[i]+=1
+            self.flight.remote_events[i]={'action':'SELECT','at':self.flight.world_time}
+            return
+        self.flight.command(command,source='remote')
+
     def control(self, command):
+        if command.startswith('UI,'):
+            if command not in ('UI,CONTEXT,GAME','UI,CONTEXT,MODAL'):raise ValueError('Invalid UI context')
+            self.ui_context_until=time.monotonic()+1.5
+            self.ui_modal=command.endswith(',MODAL')
+            self.flight.ui_blocked=self.ui_modal
+            return
         if command.startswith('VISION,'):
             parts=command.split(',')
             if len(parts)!=3 or parts[1] not in ('P1','P2') or parts[2] not in ('JUMP','DUCK_ON','DUCK_OFF'):
@@ -68,7 +85,7 @@ class Engine:
         # Developer can emulate a remote over local WebSocket/API for tests.
         # The same REMOTE message format is accepted from the Pico USB reader.
         if command.startswith('REMOTE,'):
-            self.flight.command(remote_to_flight(command),source='remote');return
+            self.remote_control(command);return
         if command.startswith("FLIGHT,"):
             self.flight.command(command); return
         if command.startswith(('PLANET,','MISSION_','ACTION,')):
@@ -130,7 +147,7 @@ class Engine:
                     # Firmware motion signals and keyboard test controls converge
                     # on the same authoritative gameplay without separate rules.
                     try:
-                        self.flight.command(remote_to_flight(data),source='remote')
+                        self.remote_control(data)
                     except ValueError:
                         self.status['message']='Ignored invalid remote event'
                     continue
@@ -158,6 +175,7 @@ class Engine:
         last=time.monotonic()
         while True:
             await asyncio.sleep(.05); now=time.monotonic()
+            if now>=self.ui_context_until:self.flight.ui_blocked=False
             self.flight.tick(now-last)
             expire_camera(self,now)
             if self.sim:

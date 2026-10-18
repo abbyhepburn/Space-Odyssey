@@ -33,7 +33,7 @@ async def browser_game(ws, engine_factory):
         while True:
             data=await ws.receive_json();command=data.get('command','')
             if not isinstance(command,str) or len(command)>120:continue
-            if not command.startswith(('FLIGHT,','VISION,')):continue
+            if not command.startswith(('FLIGHT,','VISION,','UI,')):continue
             if command in ('FLIGHT,REGENERATE','FLIGHT,SURFACE_GAME'):
                 now=time.monotonic()
                 if now-getattr(e,'last_generation_request',-100)<8:continue

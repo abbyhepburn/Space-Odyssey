@@ -7,6 +7,7 @@
 #include <BLEDevice.h>
 #include <BLEAdvertising.h>
 #include <math.h>
+#include "MotionTypes.h"
 
 //-------------------Controller Definitions--------------------------------------------
 
@@ -38,12 +39,12 @@ static const float SHAKE_RELEASE_THRESHOLD = 0.9f;
 static const uint32_t SHAKE_WINDOW_MS = 900;
 static const uint32_t PEAK_GAP_MS = 70;
 static const uint32_t SHAKE_COOLDOWN_MS = 450;
-static const float FLICK_DELTA_THRESHOLD = 5.0f;     // m/s^2 from calibrated rest
-static const float FLICK_RESET_THRESHOLD = 1.8f;
+static const float FLICK_DELTA_THRESHOLD = 2.5f;     // m/s^2 from calibrated rest
+static const float FLICK_RESET_THRESHOLD = 0.8f;
 static const uint32_t FLICK_COOLDOWN_MS = 850;
 static const uint32_t AFTER_FLICK_SHAKE_BLOCK_MS = 300;
-static const float TILT_ENTER_DEGREES = 18.0f;
-static const float TILT_EXIT_DEGREES = 11.0f;
+static const float TILT_ENTER_DEGREES = 12.0f;
+static const float TILT_EXIT_DEGREES = 7.0f;
 static const float TILT_UP_ENTER_DEGREES = 20.0f;
 static const float TILT_UP_EXIT_DEGREES = 10.0f;
 static const int JOY_ENTER = 450;
@@ -84,13 +85,14 @@ static uint32_t tiltUpPendingAt=0;
 static bool shakeAbove=false, flickAbove=false, tiltUpLatched=false;
 static uint8_t shakePeaks=0;
 static bool sensorOK=false;
+static uint32_t sensorRetryAt=0;
+static uint16_t consecutiveSensorErrors=0;
+static uint8_t recoverySamples=80;
+static float recoveryRoll=0, recoveryPitch=0, recoveryFlick=0;
 static int16_t imuRaw[6]={0,0,0,0,0,0};
 static bool imuReadOK=false;
 
-struct Motion {
-  float ax,ay,az;          // acceleration in m/s^2
-  float gx,gy,gz;          // gyro rad/s (diagnostics / future use)
-};
+
 
 // Raw I2C registers compatible with the MPU6050 register map.
 static bool writeRegister(uint8_t reg, uint8_t value) {
@@ -135,6 +137,7 @@ static float flickAxis(const Motion& m) {
 
 static bool startSensor() {
   Wire.begin(I2C_SDA, I2C_SCL);
+  Wire.setTimeOut(25);
   Wire.setClock(100000); // conservative: better clone compatibility
   // MPU breakouts use 0x68 or 0x69 depending on the AD0 pin.
   uint8_t id=0;
@@ -241,15 +244,30 @@ static void sampleMotion() {
   Motion m;
   if (!readMotion(m)) {
     imuReadOK=false;
-    tiltValue=0; // A failed IMU must not leave roll held.
+    tiltValue=0; tiltState=pendingTilt='C'; // Failed IMU releases tilt and its hysteresis latch.
+    if(++consecutiveSensorErrors>=25){sensorOK=false;sensorRetryAt=millis();}
     sensorErrors++;
     if (sensorErrors == 1 || sensorErrors % 100 == 0)
       Serial.printf("WARNING: sensor read failures=%lu\n", (unsigned long)sensorErrors);
     return;
   }
+  consecutiveSensorErrors=0;
   imuReadOK=true;
   const float values[]={m.ax,m.ay,m.az,m.gx,m.gy,m.gz};
   for(int i=0;i<6;++i)imuRaw[i]=(int16_t)constrain(values[i]*100.f,-32767.f,32767.f);
+  // Recovery calibration takes samples over successive loop iterations,
+  // so joystick/buttons and advertisements continue while the IMU settles.
+  if(recoverySamples<80){
+    recoveryRoll+=atan2f(m.ax,m.az)*180.0f/PI;
+    recoveryPitch+=atan2f(m.ay,sqrtf(m.ax*m.ax+m.az*m.az))*180.0f/PI;
+    recoveryFlick+=flickAxis(m);
+    if(++recoverySamples==80){
+      neutralRoll=recoveryRoll/80;neutralPitch=recoveryPitch/80;flickRest=recoveryFlick/80;
+      flickAbove=shakeAbove=tiltUpLatched=false;shakePeaks=0;tiltUpPendingAt=0;
+      Serial.println("MPU recovered and calibrated; motion enabled");
+    }
+    return;
+  }
   const uint32_t now=millis();
   const float mag=sqrtf(m.ax*m.ax+m.ay*m.ay+m.az*m.az);
   const float change=fabsf(mag-9.80665f);
@@ -400,7 +418,7 @@ void setup() {
   bleAdvertising->setMinInterval(32); // 20 ms radio advertising interval.
   bleAdvertising->setMaxInterval(48); // 30 ms, repeated within each snapshot window.
   broadcast({'I',sequenceNumber});
-  Serial.println("BLE advertising enabled; 10-byte payload: signature, player, action, sequence, forward, steer, tilt.");
+  Serial.println("BLE advertising enabled; 23-byte payload: controls + MPU health, accelerometer and gyroscope telemetry.");
   Serial.println("Perform gestures; watch 'P1 action=X seq=N' logs.");
 }
 
@@ -412,5 +430,15 @@ void loop() {
     sampleJoystick();
   }
   serviceBLE();
+  // Runtime retry is rate limited. Never calibrate automatically while moving:
+  // keep the controller still during this brief recovery, as at power-up.
+  if (!sensorOK && (uint32_t)(now-sensorRetryAt)>=5000) {
+    sensorRetryAt=now;
+    Serial.println("Retrying MPU sensor; hold remote still for calibration");
+    sensorOK=startSensor();
+    if(sensorOK){recoverySamples=0;recoveryRoll=recoveryPitch=recoveryFlick=0;}
+    imuReadOK=false;
+    if(sensorOK){consecutiveSensorErrors=0;tiltState=pendingTilt='C';tiltValue=0;}
+  }
   delay(1);
 }

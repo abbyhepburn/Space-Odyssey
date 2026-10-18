@@ -124,3 +124,17 @@
 @media(max-width:700px){.lane-cues{top:70px}.lane-cue{padding:5px;gap:4px}.lane-cue strong{font-size:14px}.lane-cue small{font-size:8px}.camera-access{bottom:90px;max-width:200px}}
 
 .planet-log-row{display:flex;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid #36505e;font-size:13px}.planet-log{max-height:85vh;overflow:auto}.mpu-data{font-size:11px;padding:8px;background:#06121ee8}.mpu-data p{margin:4px 0}
+
+/* Launch art is drawn locally, then lifted using the authoritative boot clock. */
+.rocket-departure{position:absolute;inset:0;z-index:3;overflow:hidden;background:radial-gradient(ellipse at 70% 45%,#17365a,#030817 65%)}
+.departure-stars{position:absolute;inset:-30%;background-image:radial-gradient(1px 1px at 15% 20%,#f4faff 90%,transparent),radial-gradient(1px 1px at 75% 65%,#b5d4ed 90%,transparent),radial-gradient(2px 2px at 48% 37%,#dbeaff 90%,transparent);background-size:163px 197px,229px 181px,397px 311px;transform:translateY(calc(var(--ascent)*8vh))}
+.departure-earth{position:absolute;left:-30%;right:-30%;height:100vh;top:72%;border-radius:50%;background:radial-gradient(ellipse at 50% 0%,#9ed5df 0%,#3c83a9 8%,#173653 29%,#050f26 58%);box-shadow:0 -6px 15px #c6f1ff88,0 -20px 70px #639edb55;transform:translateY(calc(var(--ascent)*35vh))}
+.departure-atmosphere{position:absolute;inset:40% -20% -60%;border-radius:50%;background:radial-gradient(ellipse at center,#82cfff33,transparent 66%);transform:translateY(calc(var(--ascent)*30vh))}
+.departure-rocket{position:absolute;left:69%;top:64%;width:clamp(150px,18vw,290px);filter:drop-shadow(12px 20px 30px #0008);will-change:transform}
+.departure-rocket svg{width:100%;overflow:visible}.rocket-exhaust{transform-origin:90px 374px;animation:exhaust-float .18s ease-in-out infinite alternate}@keyframes exhaust-float{to{transform:scale(.94,1.09);opacity:.75}}
+.departure-readout{position:absolute;bottom:9%;right:6%;text-align:right;display:grid;gap:9px;color:#d8eaf7;letter-spacing:2px}.departure-readout span,.departure-readout small{font-size:9px;color:#adc0d6}.departure-readout strong{font-size:clamp(13px,2vw,24px);font-weight:400}
+.mission-loading{position:absolute;inset:0;z-index:60;display:grid;place-items:center;padding:24px;background:#030b15b8;backdrop-filter:blur(12px);text-align:center}.mission-loading section{width:min(570px,100%);padding:36px;border:1px solid #d1b17b66;border-radius:20px;background:linear-gradient(140deg,#14283c,#081321);box-shadow:0 24px 100px #0008}.mission-loading span{font-size:11px;letter-spacing:3px;color:#d2b887}.mission-loading h1{font-size:clamp(26px,4vw,38px);line-height:1.15;margin:24px 0 16px}.mission-loading p{line-height:1.5;color:#c3d3e2}.mission-loading small{display:block;color:#94aabd;line-height:1.5;margin:20px}.mission-loading .loading-orbit{margin:25px auto}.mission-loading button{margin-top:10px}
+button:focus-visible,summary:focus-visible{outline:2px solid #c3e9ff;outline-offset:4px}
+.screen-stick{z-index:110}.screen-stick.offline{opacity:0}
+@media(max-width:700px){.departure-rocket{left:68%;top:40%;width:150px}.departure-readout{top:90px;bottom:auto}.so-launch--intro .so-launch__boot{max-height:45vh;overflow:auto}}
+@media(prefers-reduced-motion:reduce){.rocket-exhaust{animation:none}}

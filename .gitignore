@@ -1,0 +1,10 @@
+**/node_modules/
+frontend/dist/
+**/__pycache__/
+.pytest_cache/
+*.pyc
+*.log
+.env
+.venv/
+backend/pose_landmarker_lite.task
+backend/models/*.task

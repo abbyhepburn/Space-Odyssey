@@ -42,6 +42,21 @@ def test_hosted_rejects_other_websites(monkeypatch):
         with pytest.raises(WebSocketDisconnect):
             with client.websocket_connect('/ws/game',headers={'origin':'https://unrelated.example'}):pass
 
+
+def test_hosted_controller_button_routes_to_only_its_browser_menu(monkeypatch):
+    monkeypatch.setenv('SPACE_ODYSSEY_HOSTED','true')
+    monkeypatch.setenv('SIMULATE_PICO','true')
+    with TestClient(app) as client:
+        with client.websocket_connect('/ws/game') as browser:
+            code=browser.receive_json()['status']['pairing_code']
+            browser.send_json({'command':'UI,CONTEXT,MODAL'})
+            with client.websocket_connect('/ws/bridge') as bridge:
+                bridge.send_json({'pairing_code':code})
+                assert bridge.receive_json()['paired']
+                bridge.send_json({'kind':'line','data':'REMOTE,P2,SELECT'})
+                snapshot=until(browser,lambda s:s['flight']['ui_presses']==[0,1])
+                assert snapshot['flight']['phase']=='READY'
+
 def test_browser_camera_is_scoped_to_own_game_and_keyboard_does_not_release_it(monkeypatch):
     monkeypatch.setenv('SPACE_ODYSSEY_HOSTED','true')
     monkeypatch.setenv('SIMULATE_PICO','true')

@@ -1,5 +1,9 @@
 # Space Odyssey — 2-player planet party
 
+**October 18 integration:** use [UPDATE_2026-10-18.md](UPDATE_2026-10-18.md)
+for the current launch, controller menus/MPU telemetry, OpenCV setup, planet
+log and verification results. It supersedes historical status notes below.
+
 A first-person planet exploration game with **two-player competitive 15-second mini-games**, a cinematic cockpit launch, real-object discoveries, and short, curated NASA-backed planet facts. Players jointly pilot a ship to a destination, then **compete for individual points** in the planet's mini-game.
 
 The playable version supports keyboard controls and the ESP32/Pico remote input path. In missions, tilt a remote up to jump and push its joystick forward to duck. OpenCV camera tracking remains an optional local experiment; it requires macOS camera permission and has not been verified on this laptop. No FPGA is needed for the game graphics: your Mac renders the React/Three.js interface to a monitor.
