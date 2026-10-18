@@ -42,5 +42,5 @@ Open the website in regular Chrome, not an embedded/in-app browser. Click **Open
 
 For USB remotes alongside browser camera, run the existing launcher with `--no-camera --cloud https://spaceodyssey.work --serial YOUR_PICO_PORT` and paste the game's pairing code. Do not run the Python camera simultaneously. The Python camera remains an alternative if the browser camera is unsupported. Actual two-person tracking and physical remotes still require on-device testing.
 
-## Combined joystick flight
-P1 joystick forward (W or F) moves forward and down. Pull backward (S) to move backward and up. Left/right still turns; P2 tilt still stabilizes roll. Vertical speed is 45% of forward/reverse speed. Neutral brakes both directions. This mapping is applied by the game server; existing remote and Pico firmware do not need reflashing.
+## Joystick flight
+P1 joystick forward (W or F) moves forward; pull backward (S) to reverse. Altitude stays level. Left/right turns; P2 tilt stabilizes roll. The ship starts beside Earth at the same height. No firmware update needed.
