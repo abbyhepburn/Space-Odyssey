@@ -25,6 +25,7 @@
 #define JOY_Y 35
 #define JOY_SW 25
 #define SENSOR_ADDRESS 0x68
+static uint8_t sensorAddress = SENSOR_ADDRESS;
 
 #if PLAYER_ID != 1 && PLAYER_ID != 2
 #error PLAYER_ID must be 1 or 2
@@ -32,23 +33,26 @@
 
 // Sampling and gesture tuning. Look at Serial Monitor before adjusting.
 static const uint32_t SAMPLE_MS = 20;                 // 50 Hz
-static const float SHAKE_ACCEL_THRESHOLD = 3.2f;     // m/s^2 change in norm
-static const float SHAKE_RELEASE_THRESHOLD = 1.4f;
-static const uint32_t SHAKE_WINDOW_MS = 650;
-static const uint32_t PEAK_GAP_MS = 90;
-static const uint32_t SHAKE_COOLDOWN_MS = 550;
-static const float FLICK_DELTA_THRESHOLD = 10.5f;     // m/s^2 from calibrated rest
-static const float FLICK_RESET_THRESHOLD = 3.2f;
+static const float SHAKE_ACCEL_THRESHOLD = 2.2f;     // m/s^2 change in norm
+static const float SHAKE_RELEASE_THRESHOLD = 0.9f;
+static const uint32_t SHAKE_WINDOW_MS = 900;
+static const uint32_t PEAK_GAP_MS = 70;
+static const uint32_t SHAKE_COOLDOWN_MS = 450;
+static const float FLICK_DELTA_THRESHOLD = 5.0f;     // m/s^2 from calibrated rest
+static const float FLICK_RESET_THRESHOLD = 1.8f;
 static const uint32_t FLICK_COOLDOWN_MS = 850;
 static const uint32_t AFTER_FLICK_SHAKE_BLOCK_MS = 300;
-static const float TILT_ENTER_DEGREES = 26.0f;
-static const float TILT_EXIT_DEGREES = 16.0f;
+static const float TILT_ENTER_DEGREES = 18.0f;
+static const float TILT_EXIT_DEGREES = 11.0f;
+static const float TILT_UP_ENTER_DEGREES = 20.0f;
+static const float TILT_UP_EXIT_DEGREES = 10.0f;
 static const int JOY_ENTER = 450;
 static const int JOY_EXIT = 300;
 static const uint32_t JOY_STABLE_MS = 60;  // require consistent direction before announcing
 static const uint32_t DEBUG_JOYSTICK_MS = 250; // 0 disables joystick analog diagnostics
-static const uint32_t TILT_STABLE_MS = 150;
-static const uint32_t TILT_AFTER_MOVEMENT_MS = 180;
+static const uint32_t TILT_STABLE_MS = 100;
+static const uint32_t TILT_AFTER_MOVEMENT_MS = 100;
+static const uint32_t TILT_UP_STABLE_MS = 80;
 static const uint32_t BUTTON_DEBOUNCE_MS = 40;
 static const uint32_t AD_EVENT_MS = 160;
 static const uint32_t AD_IDLE_REFRESH_MS = 80;
@@ -67,7 +71,7 @@ static Message advertised = {'I', 0};
 static uint32_t advertisementStarted = 0, idleRefreshed = 0;
 
 static int joyCenterX=2048, joyCenterY=2048;
-static float neutralRoll=0, flickRest=0;
+static float neutralRoll=0, neutralPitch=0, flickRest=0;
 static int8_t stickForward=0,stickSteer=0,tiltValue=0;
 static char tiltState='C', joystickState='Z';
 static char pendingTilt='C', pendingJoystick='Z';
@@ -76,9 +80,12 @@ static bool rawButton=HIGH, stableButton=HIGH;
 static uint32_t buttonRawChanged=0;
 static uint32_t sampledAt=0, lastShake=0, lastFlick=0, peakAt=0, shakeStart=0;
 static uint32_t rawLoggedAt=0, sensorErrors=0;
-static bool shakeAbove=false, flickAbove=false;
+static uint32_t tiltUpPendingAt=0;
+static bool shakeAbove=false, flickAbove=false, tiltUpLatched=false;
 static uint8_t shakePeaks=0;
 static bool sensorOK=false;
+static int16_t imuRaw[6]={0,0,0,0,0,0};
+static bool imuReadOK=false;
 
 struct Motion {
   float ax,ay,az;          // acceleration in m/s^2
@@ -87,17 +94,17 @@ struct Motion {
 
 // Raw I2C registers compatible with the MPU6050 register map.
 static bool writeRegister(uint8_t reg, uint8_t value) {
-  Wire.beginTransmission(SENSOR_ADDRESS);
+  Wire.beginTransmission(sensorAddress);
   Wire.write(reg);
   Wire.write(value);
   return Wire.endTransmission() == 0;
 }
 
 static bool readRegisters(uint8_t reg, uint8_t* buf, uint8_t len) {
-  Wire.beginTransmission(SENSOR_ADDRESS);
+  Wire.beginTransmission(sensorAddress);
   Wire.write(reg);
   if (Wire.endTransmission(false) != 0) return false;
-  if (Wire.requestFrom((uint8_t)SENSOR_ADDRESS, len) != len) return false;
+  if (Wire.requestFrom(sensorAddress, len) != len) return false;
   for (uint8_t i=0;i<len;i++) buf[i] = Wire.read();
   return true;
 }
@@ -129,21 +136,34 @@ static float flickAxis(const Motion& m) {
 static bool startSensor() {
   Wire.begin(I2C_SDA, I2C_SCL);
   Wire.setClock(100000); // conservative: better clone compatibility
+  // MPU breakouts use 0x68 or 0x69 depending on the AD0 pin.
+  uint8_t id=0;
+  bool found=false;
+  const uint8_t candidates[] = {0x68, 0x69};
+  for (uint8_t address : candidates) {
+    sensorAddress=address;
+    if (readRegisters(0x75,&id,1)) { found=true; break; }
+  }
+  if (!found) {
+    Serial.println("ERROR: no MPU sensor at I2C 0x68 or 0x69; check power, SDA21/SCL22 and AD0.");
+    return false;
+  }
+  Serial.printf("IMU found at 0x%02X, WHO_AM_I=0x%02X\n",sensorAddress,id);
   // Wake, choose clock, select known measurement ranges and filtering.
   if (!writeRegister(0x6B, 0x00)) return false; // PWR_MGMT_1: wake
   delay(80);
   if (!writeRegister(0x1C, 0x00)) return false; // ACCEL_CONFIG ±2g
   if (!writeRegister(0x1B, 0x00)) return false; // GYRO_CONFIG ±250 dps
   if (!writeRegister(0x1A, 0x03)) return false; // DLPF_CFG ~44 Hz (MPU6050)
-  uint8_t id=0;
-  if (readRegisters(0x75,&id,1)) Serial.printf("WHO_AM_I=0x%02X (diagnostic only)\n",id);
   Motion probe;
   return readMotion(probe);
 }
 
 static void broadcast(const Message& m) {
-  const char raw[10] = {(char)0xFF,(char)0xFF,'A','L',
+  char raw[23] = {(char)0xFF,(char)0xFF,'A','L',
     (char)('0'+PLAYER_ID),m.action,(char)m.seq,(char)stickForward,(char)stickSteer,(char)tiltValue};
+  raw[10]=imuReadOK?1:0;
+  for(int i=0;i<6;++i){raw[11+i*2]=(char)(imuRaw[i]&255);raw[12+i*2]=(char)((uint16_t)imuRaw[i]>>8);}
   BLEAdvertisementData payload;
   payload.setFlags(0x06);
   payload.setManufacturerData(String(raw, sizeof(raw))); // preserves zero bytes
@@ -187,23 +207,30 @@ static void serviceBLE() {
   }
 }
 
+static int stableAnalog(uint8_t pin) {
+  int v[5];for(int i=0;i<5;++i)v[i]=analogRead(pin);
+  for(int i=1;i<5;++i){int a=v[i],j=i-1;while(j>=0&&v[j]>a){v[j+1]=v[j];--j;}v[j+1]=a;}
+  return v[2];
+}
 static bool calibrate() {
   Serial.println("CALIBRATE: keep remote STILL and joystick CENTERED...");
   int64_t sumX=0, sumY=0;
-  float sumRoll=0, sumFlick=0;
+  float sumRoll=0, sumPitch=0, sumFlick=0;
   const int n=80;
   for (int i=0;i<n;i++) {
     Motion m;
     if (!readMotion(m)) return false;
-    sumX += analogRead(JOY_X);
-    sumY += analogRead(JOY_Y);
+    sumX += stableAnalog(JOY_X);
+    sumY += stableAnalog(JOY_Y);
     sumRoll += atan2f(m.ax,m.az)*180.0f/PI;
+    sumPitch += atan2f(m.ay,sqrtf(m.ax*m.ax+m.az*m.az))*180.0f/PI;
     sumFlick += flickAxis(m);
     delay(15);
   }
   joyCenterX=sumX/n;
   joyCenterY=sumY/n;
   neutralRoll=sumRoll/n;
+  neutralPitch=sumPitch/n;
   flickRest=sumFlick/n;
   Serial.printf("CAL OK: joystick=(%d,%d) roll=%.1f flickRest=%.2f\n",
     joyCenterX,joyCenterY,neutralRoll,flickRest);
@@ -213,16 +240,22 @@ static bool calibrate() {
 static void sampleMotion() {
   Motion m;
   if (!readMotion(m)) {
+    imuReadOK=false;
     tiltValue=0; // A failed IMU must not leave roll held.
     sensorErrors++;
     if (sensorErrors == 1 || sensorErrors % 100 == 0)
       Serial.printf("WARNING: sensor read failures=%lu\n", (unsigned long)sensorErrors);
     return;
   }
+  imuReadOK=true;
+  const float values[]={m.ax,m.ay,m.az,m.gx,m.gy,m.gz};
+  for(int i=0;i<6;++i)imuRaw[i]=(int16_t)constrain(values[i]*100.f,-32767.f,32767.f);
   const uint32_t now=millis();
   const float mag=sqrtf(m.ax*m.ax+m.ay*m.ay+m.az*m.az);
   const float change=fabsf(mag-9.80665f);
-  if (change >= 2.0f) lastHighMotionAt=now;
+  const float gyroMagnitude=sqrtf(m.gx*m.gx+m.gy*m.gy+m.gz*m.gz);
+  const float shakeSignal=fmaxf(change,gyroMagnitude*1.5f);
+  if (change >= 2.0f || gyroMagnitude >= 1.6f) lastHighMotionAt=now;
 
   // Detect an upward burst ABOVE the startup resting acceleration.
   const float impulse=(flickAxis(m)-flickRest)*FLICK_SIGN;
@@ -237,8 +270,8 @@ static void sampleMotion() {
   }
 
   // Shake = two peaks in the time window, with separation and cooldown.
-  if (change < SHAKE_RELEASE_THRESHOLD) shakeAbove=false;
-  if (change > SHAKE_ACCEL_THRESHOLD && !shakeAbove &&
+  if (shakeSignal < SHAKE_RELEASE_THRESHOLD) shakeAbove=false;
+  if (shakeSignal > SHAKE_ACCEL_THRESHOLD && !shakeAbove &&
       (uint32_t)(now-lastFlick) > AFTER_FLICK_SHAKE_BLOCK_MS &&
       (uint32_t)(now-peakAt) >= PEAK_GAP_MS) {
     shakeAbove=true;
@@ -255,6 +288,24 @@ static void sampleMotion() {
     }
   }
   if (shakePeaks && (uint32_t)(now-shakeStart)>SHAKE_WINDOW_MS) shakePeaks=0;
+
+  // A held upward tilt is a jump; require a brief stable tilt and re-arm only
+  // after returning near the calibrated resting angle.
+  const float pitch=atan2f(m.ay,sqrtf(m.ax*m.ax+m.az*m.az))*180.0f/PI;
+  const float pitchDelta=pitch-neutralPitch;
+  if (change < 3.5f && gyroMagnitude < 2.0f) {
+    if (pitchDelta < TILT_UP_EXIT_DEGREES) {
+      tiltUpLatched=false;
+      tiltUpPendingAt=0;
+    } else if (!tiltUpLatched && pitchDelta > TILT_UP_ENTER_DEGREES) {
+      if (!tiltUpPendingAt) tiltUpPendingAt=now;
+      else if ((uint32_t)(now-tiltUpPendingAt)>=TILT_UP_STABLE_MS) {
+        sendEvent('G');
+        tiltUpLatched=true;
+        tiltUpPendingAt=0;
+      }
+    } else if (!tiltUpLatched) tiltUpPendingAt=0;
+  } else if (!tiltUpLatched) tiltUpPendingAt=0;
 
   // Relative roll; only reliable while not accelerating rapidly.
   if (change < 2.0f && (uint32_t)(now-lastHighMotionAt) >= TILT_AFTER_MOVEMENT_MS) {
@@ -285,10 +336,13 @@ static void sampleMotion() {
 }
 
 static void sampleJoystick() {
-  int x=analogRead(JOY_X)-joyCenterX;
-  int y=analogRead(JOY_Y)-joyCenterY;
-  stickSteer=abs(x)<JOY_EXIT?0:(int8_t)constrain(x*100/1600,-100,100);
-  stickForward=abs(y)<JOY_EXIT?0:(int8_t)constrain(-y*100/1600,-100,100);
+  int x=stableAnalog(JOY_X)-joyCenterX;
+  int y=stableAnalog(JOY_Y)-joyCenterY;
+  static float filteredX=0,filteredY=0;
+  filteredX+=(x-filteredX)*.45f;filteredY+=(y-filteredY)*.45f;
+  x=(int)filteredX;y=(int)filteredY;
+  stickSteer=abs(x)<JOY_EXIT?0:(int8_t)constrain((x>0?1:-1)*(abs(x)-JOY_EXIT)*100/1300,-100,100);
+  stickForward=abs(y)<JOY_EXIT?0:(int8_t)constrain((y>0?-1:1)*(abs(y)-JOY_EXIT)*100/1300,-100,100);
   char direction='Z';
   if (joystickState=='J' && x < -JOY_EXIT) direction='J';
   else if (joystickState=='K' && x > JOY_EXIT) direction='K';
@@ -329,7 +383,7 @@ void setup() {
   pinMode(JOY_SW,INPUT_PULLUP);
   analogReadResolution(12);
   long sx=0,sy=0;
-  for(int i=0;i<64;++i){sx+=analogRead(JOY_X);sy+=analogRead(JOY_Y);delay(5);}
+  for(int i=0;i<64;++i){sx+=stableAnalog(JOY_X);sy+=stableAnalog(JOY_Y);delay(5);}
   joyCenterX=sx/64;joyCenterY=sy/64;
   sensorOK=startSensor();
   if (!sensorOK) {

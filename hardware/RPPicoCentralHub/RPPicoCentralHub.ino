@@ -60,6 +60,10 @@ static void stateLine(uint8_t player, const Player& p) {
   Serial.print(p.steer / 100.0f, 2);
   Serial.print(',');
   Serial.println(p.tilt / 100.0f, 2);
+  if(p.telemetry){
+    Serial.print("REMOTE,P");Serial.print(player+1);Serial.print(",MPU,");Serial.print(p.imuOK?1:0);
+    for(int i=0;i<6;++i){Serial.print(',');Serial.print(p.imu[i]/100.f,2);}Serial.println();
+  }
 }
 
 static void accept(const Pending& entry) {
@@ -70,6 +74,7 @@ static void accept(const Pending& entry) {
   case 'B':actionLine(e.player,"SELECT");break;
   case 'S':actionLine(e.player,"SHAKE");break;
   case 'F':actionLine(e.player,"UPWARD_FLICK");break;
+  case 'G':actionLine(e.player,"JUMP");break;
  }
 }
 
