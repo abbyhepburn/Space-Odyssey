@@ -40,7 +40,7 @@ test('F remains active after other keyboard actions', () => {
   assert.deepEqual(pilotAxes(pressed,'NAVIGATION'), [1,0]);
 });
 
-test('W and arrow-up move forward; S and arrow-down reverse, no vertical movement', () => {
+test('W/up and S/down send the same signed axes as the combined joystick movements', () => {
   for (const k of ['w', 'arrowup']) {
     assert.deepEqual(pilotAxes(new Set([k]), 'NAVIGATION'), [1, 0]);
   }

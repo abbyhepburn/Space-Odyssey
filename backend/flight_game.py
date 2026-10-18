@@ -331,7 +331,7 @@ class FlightGame:
         # Keyboard, webcam and two eventual ESP32 remotes all use these same events.
         self.last_actions=[{},{}];self.sync_timestamps={};self.last_sync=-10.
         self.duck_sources=[set(),set()];self.jump_at=[-100.,-100.];self.flick_at=[-100.,-100.];self.total_scores=[0,0]
-        self.ship=[-55.,50.,-165.];self.roll=0.;self.speed=0.;self.thrust_blocked=False;self.travel=0.;self.team_score=0;self.health=100;self.boost=0.;self.boost_cooldown=0.;self.sync_effect=''
+        self.ship=[-55.,65.,-165.];self.roll=0.;self.speed=0.;self.thrust_blocked=False;self.travel=0.;self.team_score=0;self.health=100;self.boost=0.;self.boost_cooldown=0.;self.sync_effect=''
         self.inspected=None;self.transfer_from=[0.,0.,0.];self.obstacles=[];self.winner='NONE';self.event='READY';self.event_id=0;self.damage_flash=0.
     def emit(self,text):self.event=text;self.event_id+=1
     def transition(self,phase):self.phase=phase;self.age=0.
@@ -569,7 +569,7 @@ class FlightGame:
         self.boost=max(0.,self.boost-dt);self.boost_cooldown=max(0.,self.boost_cooldown-dt)
         axes=self.active_axes()
         if self.phase=='LAUNCH':
-            self.ship[1]=50.;self.ship[2]=-165.-self.age*3
+            self.ship[1]=65.;self.ship[2]=-165.-self.age*3
             if self.age>=5:self.transition('NAVIGATION');self.emit('P1 · FORWARD / BACK / TURN · P2 · LEVEL THE SHIP')
         if self.phase=='COUNTDOWN' and self.age>=COUNTDOWN_SECONDS:self.start_mission()
         if self.phase=='NAVIGATION':
@@ -584,9 +584,13 @@ class FlightGame:
             response=4.5 if throttle else 9.0
             self.speed+=(desired-self.speed)*min(1.,dt*response)
             if throttle==0 and abs(self.speed)<.05:self.speed=0.
-            before={t['planet']:t['distance'] for t in self.targets()}
+            before={t['planet']:math.dist(self.ship,t['position']) for t in self.targets()}
             step=self.speed*dt
             self.ship[0]+=math.sin(pilot['yaw'])*step
+            # Joystick forward descends; reverse climbs. Use the same signed
+            # velocity so neutral brakes all movement and stale input stops.
+            vertical_step=-step*.45
+            self.ship[1]+=vertical_step
             self.ship[2]-=math.cos(pilot['yaw'])*step
             # Don't allow the ship to move further into a planet's safety zone.
             # Backing away from a nearby planet must still be possible.
@@ -594,9 +598,10 @@ class FlightGame:
             # The old 42-unit invisible safety sphere included our spawn point
             # and falsely blocked forward thrust. Keep a clearance zone without
             # treating a safe departing ship as a collision.
-            if any(t['distance']<30
-                   and t['distance'] < before[t['planet']] - 1e-6 for t in self.targets()):
+            if any(math.dist(self.ship,t['position'])<30
+                   and math.dist(self.ship,t['position']) < before[t['planet']] - 1e-6 for t in self.targets()):
                 self.ship[0]-=math.sin(pilot['yaw'])*step
+                self.ship[1]-=vertical_step
                 self.ship[2]+=math.cos(pilot['yaw'])*step
                 self.speed=0.;self.thrust_blocked=True
             else:

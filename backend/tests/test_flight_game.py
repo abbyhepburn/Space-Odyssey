@@ -12,7 +12,7 @@ def fly(g,seconds=3):
 def test_thrust_translates_and_selection_requires_approach():
     g=FlightGame();g.command('FLIGHT,LAUNCH');advance(g,5.1)
     assert g.phase=='NAVIGATION' and g.target() is None
-    g.ship=[0.,14.,-15.] # Start the Saturn approach independently of Earth departure.
+    g.ship=[0.,57.,-15.] # Start the Saturn approach independently of Earth departure.
     before=g.ship[:];distance=g.targets()[1]['distance'];fly(g)
     assert g.ship[2]<before[2]-50 and g.targets()[1]['distance']<distance and g.target()=='SATURN'
     g.command('FLIGHT,P1,AXIS,1,1');g.command('FLIGHT,P2,AXIS,0,1');advance(g,.2)
@@ -27,7 +27,7 @@ def test_axis_validation():
 def test_select_brief_mission_and_reset(monkeypatch):
     monkeypatch.delenv('GEMINI_API_KEY',raising=False)
     async def run():
-        g=FlightGame();g.command('FLIGHT,LAUNCH');advance(g,5.1);g.ship=[0.,14.,-15.];fly(g)
+        g=FlightGame();g.command('FLIGHT,LAUNCH');advance(g,5.1);g.ship=[0.,57.,-15.];fly(g)
         g.command('FLIGHT,P2,SELECT');assert g.phase=='NAVIGATION'
         g.command('FLIGHT,P1,SELECT');assert g.phase=='TRAVEL'
         await g.task;advance(g,4.1);assert g.phase=='BRIEFING'
@@ -79,10 +79,10 @@ def test_expiry_15_seconds():
 def test_pilot_turn_and_helm_level_are_separate():
     g=FlightGame();g.transition('NAVIGATION')
     g.command('FLIGHT,P1,AXIS,0,1');advance(g,.2)
-    assert g.players[0]['yaw']>0 and g.ship[1]==50 and g.ship[2]==-165
+    assert g.players[0]['yaw']>0 and g.ship[1]==65 and g.ship[2]==-165
     yaw=g.players[0]['yaw']
     g.command('FLIGHT,P1,AXIS,0,0');g.command('FLIGHT,P2,AXIS,1,-1');advance(g,.2)
-    assert g.players[0]['yaw']==yaw and g.roll>0 and g.ship[1]==50
+    assert g.players[0]['yaw']==yaw and g.roll>0 and g.ship[1]==65
 
 
 def test_every_planet_selectable_and_wraparound():
@@ -367,3 +367,23 @@ def test_earth_departure_is_above_earth_and_can_accelerate():
     for _ in range(30):
         g.command('FLIGHT,P1,AXIS,1,0');g.tick(.05)
     assert g.speed>25 and not g.thrust_blocked
+
+def test_joystick_forward_descends_and_reverse_climbs_for_remote_and_keyboard():
+    for remote in (False,True):
+        for direction in (-1,1):
+            g=FlightGame();g.transition('NAVIGATION');g.ship=[0.,100.,100.]
+            start=g.ship[:]
+            for _ in range(20):
+                g.command(f'FLIGHT,P1,AXIS,{direction},0',source='remote' if remote else 'keyboard');g.tick(.05)
+            assert (g.ship[2]-start[2])*direction<0
+            assert (g.ship[1]-start[1])*direction<0
+            assert abs((g.ship[1]-start[1])/(g.ship[2]-start[2])-.45)<1e-6
+            advance(g,2);stopped=g.ship[:];advance(g,1)
+            assert g.ship==stopped
+
+def test_combined_motion_collision_rolls_back_altitude_too():
+    g=FlightGame();g.transition('NAVIGATION');g.ship=[0.,14.,-195.]
+    before=g.ship[:]
+    g.command('FLIGHT,P1,AXIS,1,0');g.tick(.05)
+    assert g.thrust_blocked
+    assert g.ship==before

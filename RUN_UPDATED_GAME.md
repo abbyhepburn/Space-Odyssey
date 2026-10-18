@@ -41,3 +41,6 @@ For hosting and domain setup, read DEPLOY.md.
 Open the website in regular Chrome, not an embedded/in-app browser. Click **Open motion camera**, keep the popup on the laptop, click **Enable camera**, and allow camera access. P1 stands in the left half of the mirrored preview; P2 in the right. Shoulder movement triggers jump/duck without a calibration screen. Only movement events leave the device. Browser tracking requires downloading the pinned MediaPipe runtime/model.
 
 For USB remotes alongside browser camera, run the existing launcher with `--no-camera --cloud https://spaceodyssey.work --serial YOUR_PICO_PORT` and paste the game's pairing code. Do not run the Python camera simultaneously. The Python camera remains an alternative if the browser camera is unsupported. Actual two-person tracking and physical remotes still require on-device testing.
+
+## Combined joystick flight
+P1 joystick forward (W or F) moves forward and down. Pull backward (S) to move backward and up. Left/right still turns; P2 tilt still stabilizes roll. Vertical speed is 45% of forward/reverse speed. Neutral brakes both directions. This mapping is applied by the game server; existing remote and Pico firmware do not need reflashing.
