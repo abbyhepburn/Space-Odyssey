@@ -10,13 +10,13 @@
 
 //-------------------Controller Definitions--------------------------------------------
 
-#define PLAYER_ID 1   
-#define SENSOR_TYPE 6050
+// #define PLAYER_ID 1   
+// #define SENSOR_TYPE 6050
 
 // Uncommment when uploading to controller 2 and vice versa 
 
-// #define PLAYER_ID 2 
-// #define SENSOR_TYPE 9250
+ #define PLAYER_ID 2 
+ #define SENSOR_TYPE 9250
 
 //------------------------------------------------------------------------------------
 #define I2C_SDA 21
@@ -50,8 +50,8 @@ static const uint32_t DEBUG_JOYSTICK_MS = 250; // 0 disables joystick analog dia
 static const uint32_t TILT_STABLE_MS = 150;
 static const uint32_t TILT_AFTER_MOVEMENT_MS = 180;
 static const uint32_t BUTTON_DEBOUNCE_MS = 40;
-static const uint32_t AD_EVENT_MS = 240;
-static const uint32_t AD_IDLE_REFRESH_MS = 1400;
+static const uint32_t AD_EVENT_MS = 160;
+static const uint32_t AD_IDLE_REFRESH_MS = 80;
 static const uint32_t DEBUG_RAW_INTERVAL_MS = 0;    // 0=no raw logs; 500=every 0.5 sec
 
 // Upward direction depends on board installation and grip.
@@ -60,7 +60,7 @@ static const int FLICK_AXIS = 1;
 static const int FLICK_SIGN = 1;
 
 static BLEAdvertising* bleAdvertising = nullptr;
-struct Message { char action; uint8_t seq; };
+struct Message { char action; uint8_t seq; uint32_t queuedAt; };
 static Message messages[32];
 static uint8_t queueHead=0, queueTail=0, queueCount=0, sequenceNumber=0;
 static Message advertised = {'I', 0};
@@ -68,6 +68,7 @@ static uint32_t advertisementStarted = 0, idleRefreshed = 0;
 
 static int joyCenterX=2048, joyCenterY=2048;
 static float neutralRoll=0, flickRest=0;
+static int8_t stickForward=0,stickSteer=0,tiltValue=0;
 static char tiltState='C', joystickState='Z';
 static char pendingTilt='C', pendingJoystick='Z';
 static uint32_t pendingTiltAt=0, pendingJoystickAt=0, lastHighMotionAt=0, joyDebugAt=0;
@@ -141,8 +142,8 @@ static bool startSensor() {
 }
 
 static void broadcast(const Message& m) {
-  const char raw[7] = {(char)0xFF,(char)0xFF,'A','L',
-    (char)('0'+PLAYER_ID),m.action,(char)m.seq};
+  const char raw[10] = {(char)0xFF,(char)0xFF,'A','L',
+    (char)('0'+PLAYER_ID),m.action,(char)m.seq,(char)stickForward,(char)stickSteer,(char)tiltValue};
   BLEAdvertisementData payload;
   payload.setFlags(0x06);
   payload.setManufacturerData(String(raw, sizeof(raw))); // preserves zero bytes
@@ -159,7 +160,7 @@ static void sendEvent(char action) {
     Serial.printf("WARNING: event queue full, missed %c\n", action);
     return;
   }
-  Message next={action,(uint8_t)(++sequenceNumber)};
+  Message next={action,0,millis()}; // Sequence assigned in transmission order, not queue order.
   messages[queueTail]=next;
   queueTail=(queueTail+1)%32;
   queueCount++;
@@ -168,15 +169,21 @@ static void sendEvent(char action) {
 
 static void serviceBLE() {
   uint32_t now=millis();
-  if ((uint32_t)(now-advertisementStarted) < AD_EVENT_MS) return;
+  const uint32_t hold=advertised.action=='I'?AD_IDLE_REFRESH_MS:AD_EVENT_MS;
+  if ((uint32_t)(now-advertisementStarted) < hold) return;
+  // Drop old gestures; never replay a long queue seconds later.
+  while(queueCount && (uint32_t)(now-messages[queueHead].queuedAt)>300){
+    queueHead=(queueHead+1)%32;--queueCount;
+  }
   if (queueCount) {
     Message next=messages[queueHead];
     queueHead=(queueHead+1)%32;
     queueCount--;
+    next.seq=++sequenceNumber;
     broadcast(next);
   } else if (advertised.action!='I' ||
              (uint32_t)(now-idleRefreshed) >= AD_IDLE_REFRESH_MS) {
-    broadcast({'I',sequenceNumber});
+    broadcast({'I',++sequenceNumber,now});
   }
 }
 
@@ -206,6 +213,7 @@ static bool calibrate() {
 static void sampleMotion() {
   Motion m;
   if (!readMotion(m)) {
+    tiltValue=0; // A failed IMU must not leave roll held.
     sensorErrors++;
     if (sensorErrors == 1 || sensorErrors % 100 == 0)
       Serial.printf("WARNING: sensor read failures=%lu\n", (unsigned long)sensorErrors);
@@ -264,7 +272,7 @@ static void sampleMotion() {
     if (newTilt != pendingTilt) { pendingTilt=newTilt; pendingTiltAt=now; }
     if (pendingTilt != tiltState && (uint32_t)(now-pendingTiltAt) >= TILT_STABLE_MS) {
       tiltState=pendingTilt;
-      sendEvent(tiltState);
+      tiltValue=tiltState=='L'?-100:tiltState=='R'?100:0;
     }
   }
 
@@ -279,6 +287,8 @@ static void sampleMotion() {
 static void sampleJoystick() {
   int x=analogRead(JOY_X)-joyCenterX;
   int y=analogRead(JOY_Y)-joyCenterY;
+  stickSteer=abs(x)<JOY_EXIT?0:(int8_t)constrain(x*100/1600,-100,100);
+  stickForward=abs(y)<JOY_EXIT?0:(int8_t)constrain(-y*100/1600,-100,100);
   char direction='Z';
   if (joystickState=='J' && x < -JOY_EXIT) direction='J';
   else if (joystickState=='K' && x > JOY_EXIT) direction='K';
@@ -294,7 +304,7 @@ static void sampleJoystick() {
   if (direction!=pendingJoystick) { pendingJoystick=direction; pendingJoystickAt=sampleNow; }
   if (pendingJoystick!=joystickState && (uint32_t)(sampleNow-pendingJoystickAt)>=JOY_STABLE_MS) {
     joystickState=pendingJoystick;
-    sendEvent(joystickState);
+    // Held directions travel in every snapshot, never through the event queue.
   }
 
   if (DEBUG_JOYSTICK_MS && (uint32_t)(sampleNow-joyDebugAt)>=DEBUG_JOYSTICK_MS) {
@@ -318,6 +328,9 @@ void setup() {
   Serial.printf("AstroLab DIRECT I2C Controller P%d starting...\n",PLAYER_ID);
   pinMode(JOY_SW,INPUT_PULLUP);
   analogReadResolution(12);
+  long sx=0,sy=0;
+  for(int i=0;i<64;++i){sx+=analogRead(JOY_X);sy+=analogRead(JOY_Y);delay(5);}
+  joyCenterX=sx/64;joyCenterY=sy/64;
   sensorOK=startSensor();
   if (!sensorOK) {
     Serial.println("ERROR: 0x68 raw register setup/read failed. Check power and SDA21/SCL22.");
@@ -330,8 +343,10 @@ void setup() {
   snprintf(name,sizeof(name),"AstroLab-Remote-%d",PLAYER_ID);
   BLEDevice::init(name);
   bleAdvertising=BLEDevice::getAdvertising();
+  bleAdvertising->setMinInterval(32); // 20 ms radio advertising interval.
+  bleAdvertising->setMaxInterval(48); // 30 ms, repeated within each snapshot window.
   broadcast({'I',sequenceNumber});
-  Serial.println("BLE advertising enabled; 7-byte payload FF FF A L player action sequence.");
+  Serial.println("BLE advertising enabled; 10-byte payload: signature, player, action, sequence, forward, steer, tilt.");
   Serial.println("Perform gestures; watch 'P1 action=X seq=N' logs.");
 }
 
