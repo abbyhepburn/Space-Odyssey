@@ -18,6 +18,7 @@ from vision import VisionWorker
 from exploration import Exploration
 from flight_game import FlightGame
 from control_inputs import remote_to_flight
+import hosted
 
 load_dotenv(os.getenv('SPACE_ODYSSEY_ENV', str(Path(__file__).with_name('.env'))))
 
@@ -31,16 +32,20 @@ class Engine:
         self.exploration=Exploration(self.simulated)
         self.flight=FlightGame(self.simulated)
         self.state=vars(State()).copy(); self.queue=asyncio.Queue(maxsize=2048)
+        self.cloud_queue=asyncio.Queue(maxsize=128)
         self.clients=set(); self.bridge=None; self.vision=None; self.tasks=[]
-        self.capabilities={'jump':self.simulated,'duck':self.simulated}
-        self.status={'usb':self.simulated,'mode':'SIMULATOR' if self.simulated else 'PICO USB','vision':'Disabled — demo inputs available','gemini':'Local mission catalog','message':''}
+        self.capabilities={'jump':True,'duck':True}
+        self.status={'usb':self.simulated,'mode':'SIMULATOR' if self.simulated else 'PICO USB','vision':'Remote controls ready','gemini':'Local mission catalog','message':''}
         self.active=None; self.pending=None; self.mission_index=0; self.generating=False; self.epoch=0; self.last_state=0
         self.retry_at=0; self.mission_task=None
+        self.ui_context_until=0.; self.ui_modal=False; self.ui_presses=[0,0]; self.ui_pointer_positions=[None,None]
 
     def snapshot(self):
-        return {'type':'snapshot','state':self.state,'mission':self.active,'pending':bool(self.pending) or self.generating,'status':self.status,'capabilities':self.capabilities,'exploration':self.exploration.snapshot(),'flight':self.flight.snapshot()}
+        return {'type':'snapshot','state':self.state,'mission':self.active,'pending':bool(self.pending) or self.generating,'status':self.status,'capabilities':self.capabilities,'exploration':self.exploration.snapshot(),'flight':{**self.flight.snapshot(),'ui_presses':list(self.ui_presses),'ui_pointer_positions':self.ui_pointer_positions}}
 
     def submit(self, kind, data):
+        if os.getenv('SPACE_ODYSSEY_HOST_URL') and kind in ('line','input'):
+            with contextlib.suppress(asyncio.QueueFull):self.cloud_queue.put_nowait((time.monotonic(),kind,data))
         # Scheduled on event loop by thread-safe callbacks; bounded queue drops overload.
         with contextlib.suppress(asyncio.QueueFull): self.queue.put_nowait((kind,data))
 
@@ -51,11 +56,37 @@ class Engine:
         elif self.bridge and self.status['usb']: self.bridge.send(command)
         else: raise ValueError('Pico is disconnected')
 
+    def remote_control(self, line):
+        command=remote_to_flight(line)
+        parts=command.split(',');i=int(parts[1][1])-1
+        ui_live=time.monotonic()<self.ui_context_until
+        if parts[2] in ('SELECT','PRESS') and ui_live:
+            self.ui_presses[i]+=1
+            self.ui_pointer_positions[i]=list(self.flight.remote_raw[i])
+            self.flight.remote_events[i]={'action':'SELECT','at':self.flight.world_time}
+            return
+        self.flight.command(command,source='remote')
+
     def control(self, command):
+        if command.startswith('UI,'):
+            if command not in ('UI,CONTEXT,GAME','UI,CONTEXT,MODAL'):raise ValueError('Invalid UI context')
+            self.ui_context_until=time.monotonic()+1.5
+            self.ui_modal=command.endswith(',MODAL')
+            self.flight.ui_blocked=self.ui_modal
+            return
+        if command.startswith('VISION,'):
+            parts=command.split(',')
+            if len(parts)!=3 or parts[1] not in ('P1','P2') or parts[2] not in ('JUMP','DUCK_ON','DUCK_OFF'):
+                raise ValueError('Invalid remote action event')
+            self.external_camera_last=time.monotonic();self.external_camera_expired=False
+            self.status['vision']='Camera connected'
+            self.flight.command(f'FLIGHT,{parts[1]},{parts[2]}',source='vision')
+            return
+
         # Developer can emulate a remote over local WebSocket/API for tests.
         # The same REMOTE message format is accepted from the Pico USB reader.
         if command.startswith('REMOTE,'):
-            self.flight.command(remote_to_flight(command),source='remote');return
+            self.remote_control(command);return
         if command.startswith("FLIGHT,"):
             self.flight.command(command); return
         if command.startswith(('PLANET,','MISSION_','ACTION,')):
@@ -63,7 +94,7 @@ class Engine:
         command_line(command)
         if command.startswith(('SET_MISSION','CAPABILITIES')): raise ValueError('Reserved backend command')
         if command.startswith('INPUT') and not self.simulated:
-            raise ValueError('Demo inputs require simulator mode; prevents duplicate BLE run events')
+            raise ValueError('Simulator inputs require simulator mode; prevents duplicate BLE run events')
         if command=='RESET':
             self.epoch+=1; self.active=None; self.pending=None
         self.send(command)
@@ -94,17 +125,17 @@ class Engine:
             if kind=='input':
                 with contextlib.suppress(ValueError):
                     parts=data.split(',')
-                    if self.flight.phase=='MISSION' and len(parts)==3:
+                    if len(parts)==3 and parts[0]=='INPUT' and parts[1] in ('P1','P2'):
+                        # Camera and keyboard feed the same authority in all phases.
+                        # Held duck may begin during the preparation countdown.
                         self.flight.command(f'FLIGHT,{parts[1]},{parts[2]}',source='vision')
-                    elif self.exploration.outcome=='ACTIVE' and len(parts)==3:
-                        self.exploration.action(parts[1], {'DUCK_ON':'DUCK','DUCK_OFF':'DUCK_OFF','JUMP':'JUMP'}.get(parts[2],parts[2]))
-                    else: self.send(data)
             elif kind=='usb':
                 connected,message=data; self.status.update(usb=connected,message=message)
                 if connected:
                     self.last_state=time.monotonic()
                     self.send(f"CAPABILITIES,{int(self.capabilities['jump'])},{int(self.capabilities['duck'])}")
                 else:
+                    for player in ('P1','P2'):self.flight.command(f'FLIGHT,{player},DISCONNECTED',source='remote')
                     self.epoch+=1; self.active=None; self.pending=None
             elif kind=='vision':
                 ready,message=data; self.status['vision']=message
@@ -117,7 +148,7 @@ class Engine:
                     # Firmware motion signals and keyboard test controls converge
                     # on the same authoritative gameplay without separate rules.
                     try:
-                        self.flight.command(remote_to_flight(data),source='remote')
+                        self.remote_control(data)
                     except ValueError:
                         self.status['message']='Ignored invalid remote event'
                     continue
@@ -145,6 +176,7 @@ class Engine:
         last=time.monotonic()
         while True:
             await asyncio.sleep(.05); now=time.monotonic()
+            if now>=self.ui_context_until:self.flight.ui_blocked=False
             self.flight.tick(now-last)
             expire_camera(self,now)
             if self.sim:
@@ -165,10 +197,12 @@ class Engine:
         def callback(kind): return lambda *data: loop.call_soon_threadsafe(self.submit,kind,data[0] if len(data)==1 else data)
         if not self.simulated:
             self.bridge=SerialBridge(os.getenv('SERIAL_PORT',''),callback('line'),callback('usb')); self.bridge.start()
-        if os.getenv('VISION_ENABLED','false').lower()=='true':
-            self.vision=VisionWorker(callback('input'),callback('vision')); self.vision.start()
+        # Jump and duck come from the remotes; do not start an OpenCV worker.
         self.tasks=[asyncio.create_task(self.consume()),asyncio.create_task(self.clock())]
+        if os.getenv('SPACE_ODYSSEY_HOST_URL'):self.tasks.append(asyncio.create_task(hosted.forward_to_host(self)))
     async def close(self):
+        from vision_route import stop_camera_process
+        await stop_camera_process(self)
         if self.flight.task:
             self.flight.task.cancel()
             await asyncio.gather(self.flight.task,return_exceptions=True)
@@ -219,16 +253,20 @@ async def flight_gemini_status():
 
 @app.post('/api/missions/generate')
 async def missions():
+    if hosted.enabled():raise HTTPException(403,'Use your private game connection')
     e=app.state.engine
     if e.state['phase']!='RACE' or e.active or e.pending or e.generating: raise HTTPException(409,'Wait for the next mission boundary')
     e.launch_mission(); return {'queued':True}
 @app.post('/api/control')
 async def control(body:Control):
+    if hosted.enabled():raise HTTPException(403,'Use your private game connection')
     try: app.state.engine.control(body.command)
     except ValueError as exc: raise HTTPException(400,str(exc))
     return {'ok':True}
 @app.websocket('/ws/game')
 async def game(ws:WebSocket):
+    if hosted.enabled():
+        await hosted.browser_game(ws,Engine);return
     # Local-only server; prevent unrelated browser sites driving attached hardware.
     origin=ws.headers.get('origin','')
     from urllib.parse import urlparse
@@ -252,3 +290,14 @@ async def game(ws:WebSocket):
             except (ValueError,TypeError) as exc: e.status['message']=str(exc)
     except (WebSocketDisconnect,RuntimeError): pass
     finally: e.clients.discard(ws)
+
+@app.websocket('/ws/bridge')
+async def bridge_socket(ws:WebSocket):
+    if not hosted.enabled():
+        await ws.close(code=1008);return
+    await hosted.laptop_bridge(ws)
+
+# Serve the exact production build beside its API and WebSocket endpoint.
+from fastapi.staticfiles import StaticFiles
+static_dir=Path(__file__).resolve().parent.parent/'frontend'/'dist'
+if static_dir.exists():app.mount('/',StaticFiles(directory=static_dir,html=True),name='game')

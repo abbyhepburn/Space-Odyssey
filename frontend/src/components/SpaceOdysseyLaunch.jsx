@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './SpaceOdysseyLaunch.css';
+import LaunchCinematic from './LaunchCinematic';
 
 /**
  * Self-contained cinematic opening for Space Odyssey.
@@ -11,13 +12,14 @@ import './SpaceOdysseyLaunch.css';
  * It only manages an introductory menu + skippable cockpit boot animation.
  */
 const BOOT_STAGES = [
-  { at: 0,       label: 'INITIALIZING FLIGHT SYSTEMS', detail: 'Crew telemetry established', progress: 14 },
-  { at: 2500,    label: 'NAVIGATION ARRAY ONLINE', detail: 'Star charts synchronized', progress: 38 },
-  { at: 5000,    label: 'REACTOR CORE STABILIZED', detail: 'Power distribution nominal', progress: 62 },
-  { at: 7800,    label: 'THRUSTERS ARMED', detail: 'Flight controls responding', progress: 88 },
-  { at: 10700,   label: 'CLEARANCE GRANTED', detail: 'Crew, you have the helm', progress: 100 },
+  {at:0,label:'Crew check',detail:'Two pilots aboard. Take a moment to get settled.'},
+  {at:2500,label:'Cockpit power',detail:'Displays are coming on. Earth is in view.'},
+  {at:4500,label:'Navigation check',detail:'The ship is ready for its first destination.'},
+  {at:6000,label:'Leaving orbit',detail:'Your flight begins here.'},
+  {at:8500,label:'Take the controls',detail:'Choose a planet and see what you find.'},
 ];
-const INTRO_MS = 12600;
+const CHECKLIST = ['Crew on board','Cockpit powered','Navigation ready'];
+const INTRO_MS = 10000;
 const STAR_COUNT = 140;
 
 function seededNoise(seed) {
@@ -49,12 +51,15 @@ function Icon({ name }) {
 
 export default function SpaceOdysseyLaunch({
   onLaunchComplete,
+  phase = 'READY',
+  serverAge = 0,
   onOpenControls,
   onOpenDiscoveries,
+  disabled = false,
   title = 'SPACE ODYSSEY',
 }) {
-  const [mode, setMode] = useState('menu'); // menu | intro
-  const [elapsed, setElapsed] = useState(0);
+  const mode=phase==='BOOT'?'intro':'menu'; // menu | intro
+  const elapsed=serverAge*1000;
   const [audio, setAudio] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
   const stage = useMemo(() => [...BOOT_STAGES].reverse().find(s => elapsed >= s.at) || BOOT_STAGES[0], [elapsed]);
@@ -76,35 +81,15 @@ export default function SpaceOdysseyLaunch({
   };
 
   const start = () => {
-    completedRef.current = false;
-    setElapsed(0);
-    setMode('intro');
+    if(disabled)return;
+    onLaunchComplete?.();
   };
-
-  useEffect(() => {
-    if (mode !== 'intro') return;
-    if (reducedMotion) {
-      finish();
-      return;
-    }
-    let frame;
-    const startAt = performance.now();
-    const tick = (now) => {
-      const next = Math.min(INTRO_MS, now - startAt);
-      setElapsed(next);
-      if (next >= INTRO_MS) finish();
-      else frame = requestAnimationFrame(tick);
-    };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-    // onLaunchComplete is tracked by a ref so callback identity changes do not restart playback.
-  }, [mode, reducedMotion]);
 
   useEffect(() => {
     function onKey(event) {
       if (mode === 'intro' && ['Escape', 'Enter', ' '].includes(event.key)) {
         event.preventDefault();
-        finish();
+        return;
       } else if (mode === 'menu' && event.key === 'Enter' && event.target?.tagName !== 'BUTTON') {
         event.preventDefault();
         start();
@@ -117,8 +102,11 @@ export default function SpaceOdysseyLaunch({
   const isIntro = mode === 'intro';
   const bootActive = isIntro && elapsed > 500;
   const earthVisible = !isIntro || elapsed > 3800;
+  const activeCheck = elapsed < 2500 ? 0 : elapsed < 4500 ? 1 : 2;
+  const progress = Math.min(100, Math.round(elapsed / INTRO_MS * 100));
   return (
     <section className={`so-launch so-launch--${mode}`} aria-label="Space Odyssey opening scene">
+      {isIntro&&<LaunchCinematic elapsed={elapsed}/>}
       <div className="so-launch__dust" aria-hidden="true" />
       <div className="so-launch__nebula" aria-hidden="true" />
       <div className="so-launch__stars" aria-hidden="true">
@@ -155,26 +143,32 @@ export default function SpaceOdysseyLaunch({
           <h1>{title.split(' ').map((word, i) => <span key={`${word}-${i}`}>{word}</span>)}</h1>
           <p className="so-launch__tagline">Two explorers. One spacecraft.<br />An entire universe to discover.</p>
           <div className="so-launch__menu">
-            <button type="button" className="so-launch__primary" onClick={start}>INITIATE LAUNCH <Icon name="arrow" /></button>
+            <button type="button" className="so-launch__primary" onClick={start} disabled={disabled}>{disabled?'CONNECTING TO SHIP':'INITIATE LAUNCH'} <Icon name="arrow" /></button>
             <div className="so-launch__secondary-row">
               <button type="button" onClick={onOpenControls} disabled={!onOpenControls}>FLIGHT MANUAL</button>
-              <button type="button" onClick={onOpenDiscoveries} disabled={!onOpenDiscoveries}>DISCOVERIES</button>
+              <button type="button" onClick={onOpenDiscoveries} disabled={!onOpenDiscoveries}>INFORMATION</button>
             </div>
           </div>
           <div className="so-launch__keyboard">TWO PILOTS · READY FOR LAUNCH</div>
         </main>
       ) : (
         <main className="so-launch__boot" aria-live="polite">
-          <div className="so-launch__boot-index">A // INITIALIZATION SEQUENCE</div>
+          <div className="so-launch__boot-index">CREWED FLIGHT <span>·</span> EARTH ORBIT</div>
           <h2>{stage.label}</h2>
           <p>{stage.detail}</p>
-          <div className="so-launch__progress" role="progressbar" aria-valuenow={stage.progress} aria-valuemin="0" aria-valuemax="100" aria-label="Cockpit initialization"><span style={{ width: `${stage.progress}%` }} /></div>
-          <div className="so-launch__boot-bottom"><span>SEQUENCE {String(BOOT_STAGES.indexOf(stage) + 1).padStart(2,'0')} / 05</span><span>{stage.progress}%</span></div>
-          <div className={`so-launch__hand ${elapsed > 5000 ? 'so-launch__hand--engage' : ''}`} aria-hidden="true"><div className="so-launch__sleeve" /><div className="so-launch__glove" /></div>
-          <button className="so-launch__skip" type="button" onClick={finish}>SKIP INTRO ↗</button>
+          <ol className="launch-checklist" aria-label="Launch checklist">
+            {CHECKLIST.map((item,index)=><li key={item} className={index<activeCheck?'is-complete':index===activeCheck?'is-current':''}>
+              <span className="launch-checklist__mark" aria-hidden="true">{index<activeCheck?'✓':String(index+1).padStart(2,'0')}</span>
+              <span>{item}</span>
+              <b>{index<activeCheck?'READY':index===activeCheck?'CHECKING':'STANDBY'}</b>
+            </li>)}
+          </ol>
+          <div className="launch-progress" role="progressbar" aria-label="Launch sequence" aria-valuemin="0" aria-valuemax="100" aria-valuenow={progress}><span style={{width:`${progress}%`}}/></div>
+          <div className="launch-progress__caption"><span>LAUNCH SEQUENCE</span><span>{progress}%</span></div>
+          <span className="so-launch__skip">Preparing flight · please wait</span>
         </main>
       )}
-      <footer className="so-launch__bottom"><span>EARTH ORBIT <b>◆</b> SOL 03</span><span>SPACE ODYSSEY // EXPEDITION PROGRAM</span><span>{isIntro ? 'AUTOMATED STARTUP' : 'CREW ACCESS ENABLED'}</span></footer>
+      <footer className="so-launch__bottom"><span>EARTH ORBIT <b>◆</b> {isIntro?'CREWED FLIGHT':'SOL 03'}</span><span>{isIntro?'PRE-FLIGHT CHECKLIST':'SPACE ODYSSEY // EXPEDITION PROGRAM'}</span><span>{isIntro?'SYSTEMS CHECK IN PROGRESS':'CREW ACCESS ENABLED'}</span></footer>
     </section>
   );
 }

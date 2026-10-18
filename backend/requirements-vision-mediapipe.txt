@@ -1,4 +1,4 @@
 # Install with the SAME Python environment as the Space Odyssey backend.
 -r requirements.txt
 mediapipe>=0.10.20,<0.11
-opencv-python>=4.10,<5
+opencv-contrib-python>=4.10,<5

@@ -10,8 +10,9 @@ def fly(g,seconds=3):
         g.command('FLIGHT,P1,AXIS,1,0');g.tick(.05)
 
 def test_thrust_translates_and_selection_requires_approach():
-    g=FlightGame();g.command('FLIGHT,LAUNCH');advance(g,5.1)
+    g=FlightGame();g.command('FLIGHT,LAUNCH');advance(g,15.1)
     assert g.phase=='NAVIGATION' and g.target() is None
+    g.ship=[0.,14.,-15.] # Start the Saturn approach independently of Earth departure.
     before=g.ship[:];distance=g.targets()[1]['distance'];fly(g)
     assert g.ship[2]<before[2]-50 and g.targets()[1]['distance']<distance and g.target()=='SATURN'
     g.command('FLIGHT,P1,AXIS,1,1');g.command('FLIGHT,P2,AXIS,0,1');advance(g,.2)
@@ -26,12 +27,13 @@ def test_axis_validation():
 def test_select_brief_mission_and_reset(monkeypatch):
     monkeypatch.delenv('GEMINI_API_KEY',raising=False)
     async def run():
-        g=FlightGame();g.command('FLIGHT,LAUNCH');advance(g,5.1);fly(g)
+        g=FlightGame();g.command('FLIGHT,LAUNCH');advance(g,15.1);g.ship=[0.,14.,-15.];fly(g)
         g.command('FLIGHT,P2,SELECT');assert g.phase=='NAVIGATION'
         g.command('FLIGHT,P1,SELECT');assert g.phase=='TRAVEL'
-        await g.task;advance(g,4.1);assert g.phase=='BRIEFING'
+        await g.task;advance(g,6.1);assert g.phase=='BRIEFING'
         assert g.mission.time_limit_s==15 and 1<=len(g.mission.movements)<=2
-        g.command('FLIGHT,P1,SELECT');assert g.phase=='MISSION'
+        g.command('FLIGHT,P1,SELECT');assert g.phase=='COUNTDOWN'
+        advance(g,3.05);assert g.phase=='MISSION' and g.age<.1
         g.command('FLIGHT,RESET');assert g.phase=='READY' and g.mission is None
         assert len(g.history['SATURN'])==1
     asyncio.run(run())
@@ -48,11 +50,11 @@ def test_each_game_simple_and_context_validated():
 
 def test_hurdle_hits_individual_health_and_score():
     g=FlightGame();g.planet='SATURN';g.mission=local_mission('SATURN','RING_RACE');g.start_mission();g.obstacles[0]['event_at']=.05
-    g.command('FLIGHT,P1,JUMP');advance(g,.1)
+    g.command('FLIGHT,P1,JUMP');advance(g,.3)
     assert g.players[0]['health']==100 and g.players[1]['health']==92 and g.players[0]['score']==10 and g.players[1]['score']==0
 
 def test_sync_optional_two_players_and_refractory():
-    g=FlightGame();g.planet='MARS';g.mission=local_mission('MARS','METEOR_BREAK');g.start_mission();g.obstacles=[];g.world_time=10
+    g=FlightGame();g.planet='MARS';g.mission=local_mission('MARS','METEOR_BREAK');g.start_mission();g.mission.sync_boost=True;g.obstacles=[];g.world_time=10
     g.command('FLIGHT,P1,SHAKE');assert g.boost==0
     g.command('FLIGHT,P2,SHAKE');assert g.boost>0 and g.team_score==16
     advance(g,.4);g.command('FLIGHT,P1,SHAKE');g.command('FLIGHT,P2,SHAKE');assert g.team_score==16
@@ -77,17 +79,17 @@ def test_expiry_15_seconds():
 def test_pilot_turn_and_helm_level_are_separate():
     g=FlightGame();g.transition('NAVIGATION')
     g.command('FLIGHT,P1,AXIS,0,1');advance(g,.2)
-    assert g.players[0]['yaw']>0 and g.ship[1]==0 and g.ship[2]==0
+    assert g.players[0]['yaw']>0 and g.ship[1]==14 and g.ship[2]==-120
     yaw=g.players[0]['yaw']
     g.command('FLIGHT,P1,AXIS,0,0');g.command('FLIGHT,P2,AXIS,1,-1');advance(g,.2)
-    assert g.players[0]['yaw']==yaw and g.roll>0 and g.ship[1]==0
+    assert g.players[0]['yaw']==yaw and g.roll>0 and g.ship[1]==14
 
 
 def test_every_planet_selectable_and_wraparound():
     import math
     g=FlightGame();assert {t['planet'] for t in g.targets()}=={'MERCURY','VENUS','EARTH','MARS','JUPITER','SATURN','URANUS','NEPTUNE'}
     for t in g.targets():
-        x,y,z=t['position'];g.ship=[x,y,z+100];g.travel=50
+        x,y,z=t['position'];g.ship=[x,y,z+35];g.travel=50
         g.players[0]['yaw']=2*math.pi;g.players[0]['pitch']=0
         assert g.target()==t['planet']
 
@@ -104,6 +106,7 @@ def test_both_players_have_primary_controls(mode):
     if any(c in MOVES[mode] for c in ['SHAKE','PRESS']) and mode!='SCIENCE_QUIZ':
         action='PRESS' if 'PRESS' in MOVES[mode] else 'SHAKE'
         g.mission.sync_boost=False
+        g.age=g.obstacles[0]['event_at']-.5
         for p in g.players:p['x']=g.obstacles[0]['x']
         for player in ['P1','P2']:g.command(f'FLIGHT,{player},{action}')
         assert g.obstacles[0]['destroyed_by']==[True,True] and [p['score'] for p in g.players]==[25,25]
@@ -137,6 +140,7 @@ def test_surface_modes_only_generated_for_rocky_planets():
 def test_matched_actions_trigger_optional_team_sync_without_shaking():
     g=FlightGame();g.planet='MARS';g.mission=local_mission('MARS','CRATER_LEAP');g.start_mission()
     # Two remote upward flicks within the sync window trigger shield + bonus.
+    g.mission.sync_boost=True
     g.world_time=8
     g.command('FLIGHT,P1,UPWARD_FLICK');assert g.boost==0
     g.tick(.4);g.command('FLIGHT,P2,UPWARD_FLICK')
@@ -147,6 +151,7 @@ def test_matched_actions_trigger_optional_team_sync_without_shaking():
 
 def test_sync_uses_only_related_mission_action():
     g=FlightGame();g.planet='MARS';g.mission=local_mission('MARS','SURFACE_RUN');g.start_mission()
+    g.mission.sync_boost=True
     g.world_time=3
     g.command('FLIGHT,P1,SHAKE');g.command('FLIGHT,P2,SHAKE')
     assert g.boost==0 and g.team_score==0  # unrelated movement cannot trigger bonus
@@ -167,7 +172,7 @@ def test_final_timed_events_reach_last_second():
         g=FlightGame();g.planet=planet;g.mission=local_mission(planet,mode);g.start_mission()
         event_times=[o['event_at'] for o in g.obstacles]
         assert len(event_times)==(5 if mode=='SCIENCE_QUIZ' else g.mission.obstacle_count)
-        assert event_times[0]<=1.1 and event_times[-1]>=(13 if mode=='SCIENCE_QUIZ' else 14)
+        assert .5<=event_times[0]<=3.8 and event_times[-1]>=(13 if mode=='SCIENCE_QUIZ' else 14-1e-8)
         assert all(a<b for a,b in zip(event_times,event_times[1:]))
         advance(g,13.5)
         assert g.phase=='MISSION' and any(not o['passed'][0] for o in g.obstacles)
@@ -268,7 +273,7 @@ def test_gravity_sling_requires_align_and_flick_and_has_relevant_sync():
     assert [m.control for m in g.mission.movements]==['STEER','FLICK']
     g.mission.sync_boost=False
     g.obstacles[0]['event_at']=.05;g.obstacles[0]['x']=0
-    g.command('FLIGHT,P1,UPWARD_FLICK');advance(g,.1)
+    g.command('FLIGHT,P1,UPWARD_FLICK');advance(g,.3)
     assert g.players[0]['score']==15 and g.players[1]['score']==0
     assert g.players[1]['health']==92
     assert g.snapshot()['education']['why'].startswith('Gravity assists')
@@ -276,7 +281,7 @@ def test_gravity_sling_requires_align_and_flick_and_has_relevant_sync():
 
 def test_analog_forward_thrust_and_f_release():
     """Remote joystick-forward and laptop F share normalized P1 AXIS X."""
-    g=FlightGame();g.command('FLIGHT,LAUNCH');advance(g,5.1)
+    g=FlightGame();g.command('FLIGHT,LAUNCH');advance(g,15.1)
     start=g.ship[:]
     for _ in range(22):
         g.command('FLIGHT,P1,AXIS,0.5,0')
@@ -305,19 +310,21 @@ def test_ground_mission_is_directly_requestable_on_rocky_planets(monkeypatch):
         g.command('FLIGHT,SURFACE_GAME')
         assert g.phase=='GENERATING'
         await g.task
-        assert g.mission.game_type=='SAMPLE_HUNT'
+        assert g.mission.game_type=='SURFACE_RUN'
         assert g.mission.time_limit_s==15
         g.transition('BRIEFING')
         g.command('FLIGHT,SURFACE_GAME');await g.task
         assert g.mission.game_type=='CRATER_LEAP'
         giant=FlightGame();giant.planet='JUPITER';giant.transition('BRIEFING')
         giant.command('FLIGHT,SURFACE_GAME')
-        assert giant.phase=='BRIEFING' and giant.task is None
+        assert giant.phase=='GENERATING'
+        await giant.task
+        assert giant.mission.game_type=='ORBIT_SLALOM'
     asyncio.run(run())
 
 
 def test_reverse_throttle_moves_ship_backwards_and_stops():
-    g=FlightGame();g.command('FLIGHT,LAUNCH');advance(g,5.1)
+    g=FlightGame();g.command('FLIGHT,LAUNCH');advance(g,15.1)
     initial_z=g.ship[2]
     for _ in range(20):
         g.command('FLIGHT,P1,AXIS,-1,0');g.tick(.05)
@@ -331,7 +338,7 @@ def test_reverse_throttle_moves_ship_backwards_and_stops():
 
 
 def test_p1_steers_ship_and_p2_only_stabilizes_roll():
-    g=FlightGame();g.command('FLIGHT,LAUNCH');advance(g,5.1)
+    g=FlightGame();g.command('FLIGHT,LAUNCH');advance(g,15.1)
     start_yaw=g.players[0]['yaw'];start_roll=g.roll
     for _ in range(12):
         g.command('FLIGHT,P2,AXIS,1,-1');g.tick(.05)
@@ -344,10 +351,38 @@ def test_p1_steers_ship_and_p2_only_stabilizes_roll():
 
 
 def test_reversing_after_forward_thrust_changes_signed_speed():
-    g=FlightGame();g.command('FLIGHT,LAUNCH');advance(g,5.1)
+    g=FlightGame();g.command('FLIGHT,LAUNCH');advance(g,15.1)
     for _ in range(12):
         g.command('FLIGHT,P1,AXIS,1,0');g.tick(.05)
     assert g.speed>0
     for _ in range(20):
         g.command('FLIGHT,P1,AXIS,-1,0');g.tick(.05)
     assert g.speed<0
+
+def test_earth_departure_is_beside_earth_and_can_accelerate():
+    g=FlightGame();earth=next(t for t in g.targets() if t['planet']=='EARTH')
+    assert g.ship[0]-earth['position'][0]==40
+    assert g.ship[1]==earth['position'][1]
+    g.command('FLIGHT,LAUNCH');advance(g,15.1)
+    for _ in range(30):
+        g.command('FLIGHT,P1,AXIS,1,0');g.tick(.05)
+    assert g.speed>25 and not g.thrust_blocked
+
+def test_forward_reverse_preserve_altitude_for_remote_and_keyboard():
+    for remote in (False,True):
+        for direction in (-1,1):
+            g=FlightGame();g.transition('NAVIGATION');g.ship=[0.,100.,100.]
+            start=g.ship[:]
+            for _ in range(20):
+                g.command(f'FLIGHT,P1,AXIS,{direction},0',source='remote' if remote else 'keyboard');g.tick(.05)
+            assert (g.ship[2]-start[2])*direction<0
+            assert g.ship[1]==start[1]
+            advance(g,2);stopped=g.ship[:];advance(g,1)
+            assert g.ship==stopped
+
+def test_collision_preserves_ship_position():
+    g=FlightGame();g.transition('NAVIGATION');g.ship=[0.,14.,-195.]
+    before=g.ship[:]
+    g.command('FLIGHT,P1,AXIS,1,0');g.tick(.05)
+    assert g.thrust_blocked
+    assert g.ship==before

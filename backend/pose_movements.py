@@ -20,6 +20,7 @@ class BodyPose:
 
 @dataclass
 class MovementDetector:
+    shoulder_only: bool = False
     calibration_frames: int = 40
     jump_ratio: float = 0.22
     duck_ratio: float = 0.25
@@ -36,6 +37,7 @@ class MovementDetector:
     last_jump: float = -1e6
     last_duck_release: float = -1e6
     last_seen: float = -1e6
+    pending_jump_since: float | None = None
 
     @property
     def ready(self):
@@ -53,6 +55,7 @@ class MovementDetector:
         self.jumping = False
         self.ducking = False
         self.pending_duck = None
+        self.pending_jump_since = None
 
     def lost(self, now: float):
         """Release held duck after momentary loss; recalibrate after long absence."""
@@ -67,16 +70,55 @@ class MovementDetector:
             self.reset()
         return events
 
-    def update(self, pose: BodyPose, now: float):
-        self.last_seen = now
-        if not math.isfinite(pose.shoulder_y) or not math.isfinite(pose.hip_y):
+    def shoulder_update(self, pose: BodyPose, now: float):
+        # Immediate reference from the first visible shoulders; no standing timer,
+        # knee angle, hip motion, or manual calibration is required.
+        if not all(math.isfinite(v) for v in (pose.center_x,pose.shoulder_y,pose.confidence)) or pose.confidence<.55:
+            return self.lost(now)
+        self.last_seen=now
+        if self.baseline is None:
+            scale=max(.12,min(.45,pose.hip_y-pose.shoulder_y))
+            self.baseline=(pose.shoulder_y,pose.hip_y,scale)
+            self.shoulder_filtered=pose.shoulder_y
             return []
+        self.shoulder_filtered=.45*self.shoulder_filtered+.55*pose.shoulder_y
+        base,hip,scale=self.baseline
+        up=(base-self.shoulder_filtered)/scale
+        events=[]
+        if self.jumping and up<.07:self.jumping=False
+        if not self.jumping and not self.ducking and now-self.last_jump>=self.jump_cooldown and now-self.last_duck_release>=.5 and up>self.jump_ratio:
+            if self.pending_jump_since is None:self.pending_jump_since=now
+            elif now-self.pending_jump_since>=.045:
+                self.jumping=True;self.last_jump=now;self.pending_jump_since=None;events.append('JUMP')
+        else:self.pending_jump_since=None
+        if self.jumping:
+            self.pending_duck=None
+            return events
+        want=(-up>self.duck_ratio*.37) if self.ducking else (-up>self.duck_ratio)
+        if want==self.ducking:self.pending_duck=None
+        elif self.pending_duck!=want:self.pending_duck=want;self.pending_since=now
+        elif now-self.pending_since>=self.duck_hold:
+            self.ducking=want;self.pending_duck=None
+            events.append('DUCK_ON' if want else 'DUCK_OFF')
+            if not want:self.last_duck_release=now
+        # Slowly follow neutral posture changes, never absorb a held duck/jump.
+        if abs(up)<.08 and not self.ducking and self.pending_duck is None:
+            self.baseline=(base*.985+self.shoulder_filtered*.015,hip,scale)
+        return events
+
+    def update(self, pose: BodyPose, now: float):
+        if self.shoulder_only:return self.shoulder_update(pose,now)
+        if not all(math.isfinite(v) for v in (pose.center_x,pose.shoulder_y,pose.hip_y,pose.knee_angle,pose.confidence)):
+            return self.lost(now)
         torso = pose.hip_y - pose.shoulder_y
         if pose.confidence < 0.55 or torso < 0.07:
-            return []
+            return self.lost(now)
+        self.last_seen = now
         if self.baseline is None:
             # Only calibrate from upright, roughly extended legs.
             if pose.knee_angle >= 155:
+                if self.calibration and (abs(pose.shoulder_y-self.calibration[0].shoulder_y)>torso*.12 or abs(pose.hip_y-self.calibration[0].hip_y)>torso*.12):
+                    self.calibration.clear()
                 self.calibration.append(pose)
                 if len(self.calibration) >= self.calibration_frames:
                     self.baseline = (
@@ -86,6 +128,8 @@ class MovementDetector:
                     )
                     self.shoulder_filtered = pose.shoulder_y
                     self.hip_filtered = pose.hip_y
+            else:
+                self.calibration.clear()
             return []
 
         alpha = 0.48
@@ -108,9 +152,14 @@ class MovementDetector:
                     now - self.last_duck_release >= 0.50)
         if (can_jump and shoulder_up > self.jump_ratio and
                 hip_up > self.jump_ratio * 0.62 and pose.knee_angle > 135):
-            self.jumping = True
-            self.last_jump = now
-            events.append('JUMP')
+            if self.pending_jump_since is None:self.pending_jump_since=now
+            elif now-self.pending_jump_since>=.045:
+                self.jumping = True
+                self.last_jump = now
+                self.pending_jump_since = None
+                events.append('JUMP')
+        else:
+            self.pending_jump_since = None
 
         # Avoid interpreting the start of a jump as a duck.
         if self.jumping:
@@ -140,31 +189,53 @@ class MovementDetector:
 
 
 class TwoPlayerTracker:
-    """Players stay on their assigned half. No identity assumptions across sides."""
+    """Initial left/right assignment, then nearest-position continuity.
+
+    Large jumps/ambiguous merged detections fail closed. Players should not swap
+    places; after a long absence a returning player recalibrates in their lane.
+    """
     def __init__(self, **detector_settings):
         self.detectors = [MovementDetector(**detector_settings), MovementDetector(**detector_settings)]
+        self.positions = [None, None]
+        self.visible = [False, False]
 
     @property
     def ready(self):
-        return all(detector.ready for detector in self.detectors)
+        return all(d.ready and v for d,v in zip(self.detectors,self.visible))
 
     def reset(self):
-        for detector in self.detectors:
-            detector.reset()
+        for detector in self.detectors:detector.reset()
+        self.positions = [None, None]
+        self.visible = [False, False]
+
+    def player_at(self, x):
+        candidates=[(abs(x-p),i) for i,p in enumerate(self.positions) if p is not None and self.visible[i]]
+        return min(candidates)[1] if candidates and min(candidates)[0]<.12 else None
 
     def process(self, poses: list[BodyPose], now: float):
-        groups = [[], []]
-        for pose in poses:
-            # A narrow center dead zone helps avoid accidental player swaps.
-            if pose.center_x < 0.47:
-                groups[0].append(pose)
-            elif pose.center_x > 0.53:
-                groups[1].append(pose)
-        events = []
-        for index, candidates in enumerate(groups):
-            if len(candidates) == 1:
-                actions = self.detectors[index].update(candidates[0], now)
+        poses=[p for p in poses if p.confidence>=.55 and all(math.isfinite(v) for v in (p.center_x,p.shoulder_y,p.hip_y,p.knee_angle)) and p.hip_y-p.shoulder_y>=.07]
+        assignments={};used=set();events=[]
+        self.visible=[False,False]
+        # Preserve identities using position continuity before assigning newcomers.
+        pairs=sorted((abs(p.center_x-x),i,j) for i,x in enumerate(self.positions) if x is not None
+                     for j,p in enumerate(poses) if abs(p.center_x-x)<.18)
+        for distance,i,j in pairs:
+            if i in assignments or j in used:continue
+            # If one body is almost equidistant from two known people, wait.
+            other=self.positions[1-i]
+            if other is not None and abs(abs(poses[j].center_x-other)-distance)<.04:continue
+            assignments[i]=j;used.add(j)
+        for j,p in enumerate(poses):
+            if j in used or .47<=p.center_x<=.53:continue
+            i=0 if p.center_x<.5 else 1
+            if self.positions[i] is None and i not in assignments:
+                assignments[i]=j;used.add(j)
+        for i,d in enumerate(self.detectors):
+            if i in assignments:
+                p=poses[assignments[i]];self.positions[i]=p.center_x;self.visible[i]=True
+                actions=d.update(p,now)
             else:
-                actions = self.detectors[index].lost(now)
-            events.extend((f'P{index + 1}', action) for action in actions)
+                actions=d.lost(now)
+                if now-d.last_seen>3.:self.positions[i]=None
+            events.extend((f'P{i+1}',action) for action in actions)
         return events

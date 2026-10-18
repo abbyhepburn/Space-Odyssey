@@ -56,6 +56,60 @@ def test_remote_p1_yaw_p2_only_roll():
     assert g.roll<0
 
 
+def test_centered_controllers_hold_ship_heading_and_roll_without_spin():
+    g=FlightGame();g.transition('NAVIGATION');g.roll=.12
+    g.players[0]['yaw']=.45;g.players[1]['yaw']=.45
+    start=list(g.ship)
+    for _ in range(400):
+        g.command('FLIGHT,P1,AXIS,0,0');g.command('FLIGHT,P2,AXIS,0,0')
+        g.tick(.05)
+    assert g.roll==.12 and g.players[0]['yaw']==pytest.approx(.45)
+    assert g.ship==start and g.speed==0
+
+
+def test_roll_stops_changing_when_controller_returns_to_center():
+    g=FlightGame();g.transition('NAVIGATION')
+    g.command('FLIGHT,P2,AXIS,0,1');g.tick(.2)
+    assert g.roll<0
+    g.command('FLIGHT,P2,AXIS,0,0');held=g.roll
+    for _ in range(40):g.tick(.05)
+    assert g.roll==held
+
+
+def test_p2_tilt_ramps_smoothly_and_neutral_stops_without_drift():
+    g=FlightGame();g.transition('NAVIGATION')
+    g.command('FLIGHT,P2,SENSORS,0,0,1',source='remote')
+    g.tick(1/60)
+    assert 0 < g.roll_input < .2
+    first=g.roll
+    g.tick(.1)
+    assert .5 < g.roll_input < 1
+    assert g.roll < first < 0
+    g.command('FLIGHT,P2,SENSORS,0,0,-1',source='remote')
+    before=g.roll_input;g.tick(1/60)
+    assert -1 < g.roll_input < before
+    g.command('FLIGHT,P2,SENSORS,0,0,0',source='remote')
+    held=g.roll;g.tick(.2)
+    assert g.roll_input==0 and g.roll==held
+
+
+def test_p1_turning_matches_github_response_and_release_holds_heading():
+    import math
+    g=FlightGame();g.transition('NAVIGATION')
+    g.command('FLIGHT,P1,AXIS,0,1');g.tick(.1)
+    assert g.players[0]['yaw']==pytest.approx(.065)
+    g.command('FLIGHT,P1,AXIS,0,-1');g.tick(.1)
+    assert g.players[0]['yaw']==pytest.approx(0.)
+    g.command('FLIGHT,P1,AXIS,0,.25');g.tick(.1)
+    assert g.players[0]['yaw']==pytest.approx(.01625)
+    g.command('FLIGHT,P1,AXIS,0,0')
+    heading=g.players[0]['yaw'];g.tick(.2)
+    assert g.players[0]['yaw']==pytest.approx(heading)
+    g.players[0]['yaw']=math.pi-.01
+    g.command('FLIGHT,P1,AXIS,0,1');g.tick(.1)
+    assert g.players[0]['yaw']==pytest.approx(-math.pi+.055)
+
+
 def test_physical_usb_event_reaches_flight_authority():
     import asyncio
     async def scenario():

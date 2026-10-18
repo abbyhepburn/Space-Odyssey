@@ -15,24 +15,24 @@ The keyboard works even when those buttons are hidden.
 | Select planet/start game | P1 joystick button | E or Enter |
 | Stabilize roll | P2 remote tilt left/right | J/L or arrow keys |
 
-During missions both players use their own joystick or gestures (tilt, shake,
-upward flick, button press) and their own jump/duck webcam input. See README
-for computer mission mappings. A mission-specific sync bonus is optional.
+During missions both players use their own remote: tilt up to jump, push the
+joystick forward to duck, and use tilt/shake/flick/button actions when prompted.
+OpenCV is an optional local experiment. A mission-specific sync bonus is optional.
 
 ## Unified backend transport
 
 All inputs reach the same Python `FlightGame` authority:
 - Browser keyboard/test UI: `FLIGHT,P1,AXIS,<forward>,<steer>` and other
   `FLIGHT,P1,...` / `FLIGHT,P2,...` action commands.
-- Future Pico USB lines: `REMOTE,P1,AXIS,<forward>,<steer>`,
+- Pico USB lines: `REMOTE,P1,AXIS,<forward>,<steer>`,
   `REMOTE,P2,AXIS,0,<roll_correction>`, and
-  `REMOTE,P1,SELECT` / `REMOTE,P2,SHAKE` / etc. The backend's
+  `REMOTE,P1,SELECT` / `REMOTE,P2,SHAKE` / `REMOTE,P1,JUMP` / etc. The backend's
   `control_inputs.py` validates these and converts them to the same FLIGHT actions.
 - OpenCV (optional): normalized JUMP, DUCK_ON, DUCK_OFF events.
 
-**Important:** The remote firmware has not been implemented or validated yet.
-The `REMOTE,...` format is a proposed input contract for connecting the Pico
-later; do not assume the current firmware already emits those lines.
+The remote packet path is implemented, but the current tilt, shake, joystick
+centering, and firmware changes still need to be flashed and verified on both
+physical remotes.
 
 If both a remote and computer test keys are active, the backend prioritizes fresh
 remote analog readings. If the remote goes silent for 400 ms, axes return to

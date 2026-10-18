@@ -3,6 +3,7 @@ import os
 import threading
 import time
 import math
+from download_pose_model import MODEL_PATH
 
 class Detector:
     def __init__(self):
@@ -34,61 +35,49 @@ class VisionWorker(threading.Thread):
         self.recalibrate=threading.Event()
     def close(self): self.stop_event.set(); self.join(timeout=3)
     def run(self):
-        cap=None
+        cap=None;failed=False
         try:
             import cv2
             import mediapipe as mp
             options=mp.tasks.vision.PoseLandmarkerOptions(
-                base_options=mp.tasks.BaseOptions(model_asset_path=os.getenv('POSE_MODEL_PATH','pose_landmarker_lite.task')),
+                base_options=mp.tasks.BaseOptions(model_asset_path=os.getenv('POSE_MODEL_PATH',str(MODEL_PATH))),
                 running_mode=mp.tasks.vision.RunningMode.VIDEO, num_poses=2)
             cap=cv2.VideoCapture(int(os.getenv('CAMERA_INDEX','0')))
             if not cap.isOpened(): raise RuntimeError('Camera not found')
-            detectors=[Detector(),Detector()]; last_seen=[0,0]; prior=[None,None]; stamp=0
+            from pose_movements import TwoPlayerTracker
+            from camera_vision import extract_body_pose, overlay
+            # Same detector and player assignment as the standalone OpenCV path.
+            tracker=TwoPlayerTracker(shoulder_only=True);stamp=0;last_status=0.;last_held=0.
             with mp.tasks.vision.PoseLandmarker.create_from_options(options) as landmarker:
                 while not self.stop_event.is_set():
-                    ok, frame=cap.read()
-                    if not ok: raise RuntimeError('Camera frame unavailable')
+                    ok,frame=cap.read()
+                    if not ok:raise RuntimeError('Camera frame unavailable')
+                    frame=cv2.flip(frame,1) # P1 left / P2 right in mirrored preview.
                     if self.recalibrate.is_set():
-                        detectors=[Detector(),Detector()]; self.recalibrate.clear()
-                        for player in ('P1','P2'): self.send(f'INPUT,{player},DUCK_OFF')
-                    now=time.monotonic(); stamp=max(stamp+1,int(now*1000))
-                    result=landmarker.detect_for_video(mp.Image(image_format=mp.ImageFormat.SRGB,data=cv2.cvtColor(frame,cv2.COLOR_BGR2RGB)),stamp)
-                    groups=[[],[]]; warning='Stand upright for 45 frames. Keep your assigned side.'
-                    for pose in result.pose_landmarks:
-                        x=(pose[23].x+pose[24].x)/2
-                        if min(pose[j].visibility for j in (11,12,23,24,25,26,27,28))<.65: continue
-                        side=0 if x<.5 else 1; groups[side].append((x,pose))
-                    for i, group in enumerate(groups):
-                        if len(group)!=1 or abs(group[0][0]-.5)<.07:
-                            if detectors[i].duck: self.send(f'INPUT,P{i+1},DUCK_OFF')
-                            detectors[i]=Detector(); prior[i]=None
-                            warning='Pose missing / center crossing. Return to assigned sides and recalibrate.'
-                            continue
-                        x,pose=group[0]
-                        if prior[i] is not None and abs(x-prior[i])>.18:
-                            detectors[i]=Detector(); warning='Possible side swap — recalibrating. P1 left, P2 right.'
-                        prior[i]=x; last_seen[i]=now
-                        hip=(pose[23].y+pose[24].y)/2; ankle=(pose[27].y+pose[28].y)/2
-                        def angle(a,b,c):
-                            u=(a.x-b.x,a.y-b.y); v=(c.x-b.x,c.y-b.y)
-                            return math.degrees(math.acos(max(-1,min(1,sum(u[j]*v[j] for j in (0,1))/(math.hypot(*u)*math.hypot(*v)+1e-8)))))
-                        knee=(angle(pose[23],pose[25],pose[27])+angle(pose[24],pose[26],pose[28]))/2
-                        for action in detectors[i].update(hip,ankle,knee,now): self.send(f'INPUT,P{i+1},{action}')
-                        if self.debug:
-                            h,w=frame.shape[:2]
-                            for a,b in ((11,12),(11,23),(12,24),(23,24),(23,25),(25,27),(24,26),(26,28)):
-                                cv2.line(frame,(int(pose[a].x*w),int(pose[a].y*h)),(int(pose[b].x*w),int(pose[b].y*h)),(80,240,180),2)
-                            cv2.putText(frame,f'P{i+1}',(int(x*w),50),cv2.FONT_HERSHEY_SIMPLEX,1,(80,240,180),2)
-                    ready=all(d.baseline is not None for d in detectors)
-                    self.status(ready,'Tracking P1 left / P2 right' if ready else warning)
+                        tracker.reset();self.recalibrate.clear()
+                        for player in ('P1','P2'):self.send(f'INPUT,{player},DUCK_OFF')
+                    now=time.monotonic();stamp=max(stamp+1,int(now*1000))
+                    image=mp.Image(image_format=mp.ImageFormat.SRGB,data=cv2.cvtColor(frame,cv2.COLOR_BGR2RGB))
+                    result=landmarker.detect_for_video(image,stamp)
+                    for player,action in tracker.process([extract_body_pose(p) for p in result.pose_landmarks],now):
+                        self.send(f'INPUT,{player},{action}')
+                    if now-last_held>=.3:
+                        for i,detector in enumerate(tracker.detectors):
+                            self.send(f'INPUT,P{i+1},'+('DUCK_ON' if detector.ducking else 'DUCK_OFF'))
+                        last_held=now
+                    if now-last_status>=.5:
+                        self.status(tracker.ready,'Tracking shoulders: P1 left / P2 right' if tracker.ready else 'Keep both players’ shoulders visible in their own half')
+                        last_status=now
                     if self.debug:
-                        cv2.putText(frame,'P1 LEFT | P2 RIGHT — C: calibrate', (12,25),cv2.FONT_HERSHEY_SIMPLEX,.5,(255,255,255),1)
+                        overlay(cv2,frame,result.pose_landmarks,tracker,None)
                         cv2.imshow('Space Odyssey — pose debug',frame)
-                        if cv2.waitKey(1)&0xff==ord('c'): self.recalibrate.set()
-                    else: cv2.destroyAllWindows()
-        except Exception as exc: self.status(False,f'Vision unavailable: {exc}. Demo controls remain available.')
+                        key=cv2.waitKey(1)&0xff
+                        if key==ord('c'):self.recalibrate.set()
+                        if key in (ord('q'),27):break
+        except Exception as exc:
+            failed=True;self.status(False,f'Vision unavailable: {exc}. Demo controls remain available.')
         finally:
-            self.status(False,'Vision stopped — demo controls available')
+            if not failed:self.status(False,'Vision stopped — demo controls available')
             for player in ('P1','P2'): self.send(f'INPUT,{player},DUCK_OFF')
             if cap is not None: cap.release()
             try:

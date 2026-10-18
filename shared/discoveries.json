@@ -1,0 +1,306 @@
+[
+  {
+    "id": "iss",
+    "name": "International Space Station",
+    "category": "Space station",
+    "zone": "EARTH",
+    "kind": "iss",
+    "position": [
+      -68,
+      14,
+      -241
+    ],
+    "location": "Low Earth orbit, approximately 400 km above Earth",
+    "fact": "The ISS is an inhabited orbital laboratory where international crews perform research in microgravity.",
+    "details": [
+      "Orbits Earth roughly every 90 minutes.",
+      "Continuously occupied since November 2000."
+    ],
+    "url": "https://www.nasa.gov/international-space-station/"
+  },
+  {
+    "id": "hubble",
+    "name": "Hubble Space Telescope",
+    "category": "Space telescope",
+    "zone": "EARTH",
+    "kind": "hubble",
+    "position": [
+      -31,
+      14,
+      -232
+    ],
+    "location": "Low Earth orbit, approximately 500\u2013550 km above Earth",
+    "fact": "Hubble observes the universe from above Earth\u2019s atmosphere, studying stars, planets and distant galaxies.",
+    "details": [
+      "Launched in 1990.",
+      "Hubble orbits Earth; it does not orbit Jupiter."
+    ],
+    "url": "https://science.nasa.gov/mission/hubble/"
+  },
+  {
+    "id": "webb",
+    "name": "James Webb Space Telescope",
+    "category": "Infrared space telescope",
+    "zone": "EARTH_L2",
+    "kind": "webb",
+    "position": [
+      -109,
+      14,
+      -286
+    ],
+    "location": "Halo orbit around Sun\u2013Earth L2, roughly 1.5 million km beyond Earth, away from the Sun",
+    "fact": "Webb is a real space telescope that studies the early universe and exoplanets in infrared light.",
+    "details": [
+      "Webb orbits the Sun, not Jupiter or Earth.",
+      "Its large sunshield keeps the instruments cold."
+    ],
+    "url": "https://science.nasa.gov/mission/webb/orbit/"
+  },
+  {
+    "id": "goes19",
+    "name": "GOES-19",
+    "category": "Weather satellite",
+    "zone": "EARTH",
+    "kind": "goes",
+    "position": [
+      -13,
+      14,
+      -242
+    ],
+    "location": "Geostationary orbit over the equator near 75.2\u00b0W, around 35,786 km above Earth",
+    "fact": "NOAA\u2019s GOES-19 is the operational GOES-East weather satellite, tracking storms and lightning.",
+    "details": [
+      "Replaced GOES-16 as GOES-East in April 2025.",
+      "Its geostationary orbit keeps it above roughly the same point on Earth."
+    ],
+    "url": "https://www.noaa.gov/news-release/noaas-goes-19-satellite-now-operational-providing-critical-new-data-to-forecasters"
+  },
+  {
+    "id": "goes16",
+    "name": "GOES-16",
+    "category": "Weather satellite",
+    "zone": "EARTH",
+    "kind": "goes",
+    "position": [
+      -101,
+      14,
+      -255
+    ],
+    "location": "Geostationary Earth orbit; on-orbit storage/standby in 2026",
+    "fact": "GOES-16 monitored weather across the Americas and now remains in geostationary orbit in a standby role.",
+    "details": [
+      "Launched in 2016.",
+      "GOES-19 took over GOES-East operations in April 2025."
+    ],
+    "url": "https://www.ospo.noaa.gov/operations/goes/status.html"
+  },
+  {
+    "id": "landsat9",
+    "name": "Landsat 9",
+    "category": "Earth-observation satellite",
+    "zone": "EARTH",
+    "kind": "landsat",
+    "position": [
+      -86,
+      14,
+      -231
+    ],
+    "location": "Sun-synchronous polar orbit around Earth, approximately 705 km high",
+    "fact": "Landsat 9 photographs Earth to document changes in forests, farms, water and cities.",
+    "details": [
+      "Launched in September 2021.",
+      "Its polar orbit allows global observations."
+    ],
+    "url": "https://science.nasa.gov/mission/landsat-9/"
+  },
+  {
+    "id": "gps3",
+    "name": "GPS III satellite",
+    "category": "Navigation satellite",
+    "zone": "EARTH",
+    "kind": "gps",
+    "position": [
+      -35,
+      14,
+      -257
+    ],
+    "location": "Medium Earth orbit, approximately 20,200 km above Earth",
+    "fact": "GPS satellites transmit navigation and timing signals used around the world.",
+    "details": [
+      "GPS operates as a constellation of many spacecraft.",
+      "Precise atomic clocks are essential to positioning."
+    ],
+    "url": "https://www.gps.gov/systems/gps/space/"
+  },
+  {
+    "id": "moon",
+    "name": "Earth\u2019s Moon",
+    "category": "Natural satellite",
+    "zone": "EARTH",
+    "kind": "moon",
+    "position": [
+      -121,
+      14,
+      -265
+    ],
+    "location": "Orbits Earth, averaging roughly 384,400 km away",
+    "fact": "Earth\u2019s Moon shapes the tides and preserves a history of impacts from the early solar system.",
+    "details": [
+      "Earth has one natural moon.",
+      "The same lunar hemisphere faces Earth most of the time."
+    ],
+    "url": "https://science.nasa.gov/moon/facts/"
+  },
+  {
+    "id": "europa",
+    "name": "Europa",
+    "category": "Jupiter moon",
+    "zone": "JUPITER",
+    "kind": "moon",
+    "position": [
+      79,
+      32,
+      -221
+    ],
+    "location": "Orbits Jupiter; it is one of the four large Galilean moons",
+    "fact": "Europa likely hides a salty liquid ocean beneath its icy shell.",
+    "details": [
+      "A major target in the search for habitable environments.",
+      "This moon is located by Jupiter, not by Earth."
+    ],
+    "url": "https://science.nasa.gov/jupiter/moons/europa/"
+  },
+  {
+    "id": "io",
+    "name": "Io",
+    "category": "Jupiter moon",
+    "zone": "JUPITER",
+    "kind": "moon",
+    "position": [
+      142,
+      27,
+      -189
+    ],
+    "location": "Orbits Jupiter, closer to Jupiter than Europa",
+    "fact": "Io is the most volcanically active world in our solar system.",
+    "details": [
+      "Jupiter\u2019s gravity helps heat Io\u2019s interior.",
+      "Its surface is continuously remade by eruptions."
+    ],
+    "url": "https://science.nasa.gov/jupiter/moons/io/"
+  },
+  {
+    "id": "titan",
+    "name": "Titan",
+    "category": "Saturn moon",
+    "zone": "SATURN",
+    "kind": "moon",
+    "position": [
+      -36,
+      36,
+      -245
+    ],
+    "location": "Orbits Saturn; Saturn\u2019s largest moon",
+    "fact": "Titan has a thick atmosphere and lakes and seas of liquid methane and ethane.",
+    "details": [
+      "Its surface is extremely cold.",
+      "NASA\u2019s Dragonfly rotorcraft will investigate Titan."
+    ],
+    "url": "https://science.nasa.gov/saturn/moons/titan/"
+  },
+  {
+    "id": "sun",
+    "name": "The Sun",
+    "category": "Star",
+    "zone": "INNER_SOLAR_SYSTEM",
+    "kind": "star",
+    "position": [
+      -291,
+      86,
+      -65
+    ],
+    "location": "At the center of the solar system; all eight planets orbit the Sun",
+    "fact": "The Sun is the star whose gravity holds the solar system together.",
+    "details": [
+      "Earth takes one year to orbit the Sun.",
+      "Sunlight reaches Earth in about eight minutes."
+    ],
+    "url": "https://science.nasa.gov/sun/facts/"
+  },
+  {
+    "id": "halley",
+    "name": "Halley\u2019s Comet",
+    "category": "Comet",
+    "zone": "SOLAR_ORBIT",
+    "kind": "comet",
+    "position": [
+      -170,
+      105,
+      -470
+    ],
+    "location": "Long elliptical orbit around the Sun, reaching beyond Neptune; shown schematically, not at its live position",
+    "fact": "Halley\u2019s Comet returns to the inner solar system roughly every 76 years.",
+    "details": [
+      "Last close approach was in 1986; next is expected in 2061.",
+      "Its actual location changes continuously as it orbits the Sun."
+    ],
+    "url": "https://science.nasa.gov/solar-system/comets/1p-halley/"
+  },
+  {
+    "id": "orion",
+    "name": "Orion Nebula",
+    "category": "Nebula",
+    "zone": "DEEP_SKY",
+    "kind": "nebula",
+    "position": [
+      -900,
+      390,
+      -1420
+    ],
+    "location": "Within the Milky Way, roughly 1,350 light-years from Earth, toward Orion",
+    "fact": "The Orion Nebula is a large, nearby stellar nursery where new stars are forming.",
+    "details": [
+      "Far outside our solar system.",
+      "Displayed as a background sky discovery, not a nearby travel destination."
+    ],
+    "url": "https://science.nasa.gov/asset/hubble/orion-nebula/"
+  },
+  {
+    "id": "crab",
+    "name": "Crab Nebula",
+    "category": "Supernova remnant",
+    "zone": "DEEP_SKY",
+    "kind": "nebula",
+    "position": [
+      930,
+      410,
+      -1370
+    ],
+    "location": "Within the Milky Way, around 6,500 light-years from Earth, toward Taurus",
+    "fact": "The Crab Nebula is the expanding remnant of a stellar explosion observed in 1054.",
+    "details": [
+      "Contains a fast-spinning neutron star.",
+      "A distant sky object, not orbiting any solar-system planet."
+    ],
+    "url": "https://science.nasa.gov/mission/hubble/science/explore-the-night-sky/hubble-messier-catalog/messier-1/"
+  },
+  {
+    "id": "andromeda",
+    "name": "Andromeda Galaxy",
+    "category": "Galaxy",
+    "zone": "DEEP_SKY",
+    "kind": "galaxy",
+    "position": [
+      650,
+      490,
+      -1490
+    ],
+    "location": "Outside the Milky Way, roughly 2.5 million light-years away, toward Andromeda",
+    "fact": "Andromeda is a large spiral galaxy beyond our own Milky Way.",
+    "details": [
+      "Contains hundreds of billions of stars.",
+      "Shown on the distant sky, not physically near Jupiter or Saturn."
+    ],
+    "url": "https://science.nasa.gov/asset/hubble/andromeda-galaxy-m31/"
+  }
+]

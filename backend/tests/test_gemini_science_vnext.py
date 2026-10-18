@@ -22,9 +22,9 @@ def test_gemini_selects_actual_game_family_not_just_a_name(monkeypatch):
 
     class FakeResult:
         text = json.dumps({
-            'game_type': 'SCIENCE_QUIZ',
+            'game_type': 'RELAY_REPAIR',
             'name': 'Jupiter Research Showdown',
-            'briefing': 'Pick the correct facts about Jupiter before your rival does.',
+            'briefing': 'Tilt and repair orbiting relays before your rival does.',
             'event_pattern': 'ALTERNATING',
         })
 
@@ -59,13 +59,13 @@ def test_gemini_selects_actual_game_family_not_just_a_name(monkeypatch):
 
     mission, source = asyncio.run(generate_game('JUPITER'))
     assert source == 'GEMINI · LIVE CHALLENGE'
-    assert mission.game_type == 'SCIENCE_QUIZ'
+    assert mission.game_type == 'RELAY_REPAIR'
     assert mission.name == 'Jupiter Research Showdown'
     assert mission.event_pattern == 'ALTERNATING'
-    assert [m.control for m in mission.movements] == ['TILT', 'PRESS']
+    assert [m.control for m in mission.movements] == ['TILT', 'SHAKE']
     assert mission.time_limit_s == 15 and mission.obstacle_count == 5
-    assert not mission.sync_boost
-    assert calls and 'SCIENCE_QUIZ' in calls[0]['contents']
+    assert mission.sync_boost
+    assert calls and 'RELAY_REPAIR' in calls[0]['contents']
     assert 'response_json_schema' in calls[0]['config']
 
 

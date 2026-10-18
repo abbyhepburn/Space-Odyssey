@@ -1,2 +1,3 @@
 import {defineConfig} from 'vite';
-export default defineConfig({server:{proxy:{'/ws':{target:'ws://127.0.0.1:8000',ws:true},'/api':'http://127.0.0.1:8000','/health':'http://127.0.0.1:8000','/state':'http://127.0.0.1:8000'}}});
+const backend=process.env.SPACE_ODYSSEY_BACKEND||'http://127.0.0.1:8000';
+export default defineConfig({server:{proxy:{'/ws':{target:backend.replace(/^http/,'ws'),ws:true},'/api':backend,'/health':backend,'/state':backend}}});

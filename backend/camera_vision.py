@@ -3,7 +3,7 @@
 Run in a separate terminal on the MacBook. Video stays LOCAL; only movement
 signals reach FastAPI. Use `python camera_vision.py --scan` to find camera index.
 
-Keyboard in camera preview: C = recalibrate both players, Q/ESC = quit.
+Keyboard in camera preview: C = reset tracking both players, Q/ESC = quit.
 """
 import argparse
 import json
@@ -28,10 +28,12 @@ class GameBridge:
     """Network work in another thread so camera frames never wait on HTTP."""
     def __init__(self, backend: str):
         backend = backend.rstrip('/')
-        if backend not in ('http://127.0.0.1:8000', 'http://localhost:8000'):
-            raise ValueError('For safety, backend must be local: http://127.0.0.1:8000')
+        from urllib.parse import urlparse
+        parsed=urlparse(backend)
+        if parsed.scheme!='http' or parsed.hostname not in ('127.0.0.1','localhost') or parsed.path not in ('','/') or parsed.username or parsed.password or parsed.query or parsed.fragment:
+            raise ValueError('Camera backend must be a local HTTP server')
         self.backend = backend
-        self.messages = queue.Queue(maxsize=80)
+        self.messages = queue.Queue(maxsize=16)
         self.stop = threading.Event()
         self.connected = False
         self.errors = 0
@@ -40,7 +42,7 @@ class GameBridge:
 
     def post(self, path, data):
         try:
-            self.messages.put_nowait((path, data))
+            self.messages.put_nowait((path, data, time.monotonic()))
         except queue.Full:
             # Never block the live camera on a disconnected backend.
             if path.endswith('/event'):
@@ -50,15 +52,18 @@ class GameBridge:
         print(f'CAMERA EVENT: {player} {action}', flush=True)
         self.post('/api/vision/event', {'player': player, 'action': action})
 
-    def heartbeat(self, ready, detail):
-        self.post('/api/vision/heartbeat', {'ready': bool(ready), 'detail': detail[:120]})
+    def heartbeat(self, ready, detail, ducks=None):
+        self.post('/api/vision/heartbeat', {'ready': bool(ready), 'detail': detail[:120], 'ducks': ducks})
 
     def _worker(self):
         while not self.stop.is_set() or not self.messages.empty():
             try:
-                path, data = self.messages.get(timeout=0.1)
+                path, data, created = self.messages.get(timeout=0.1)
             except queue.Empty:
                 continue
+            if time.monotonic()-created > .3:
+                self.messages.task_done()
+                continue  # Old movements must never replay after reconnect.
             payload = json.dumps(data).encode('utf-8')
             req = Request(self.backend + path, data=payload,
                           headers={'Content-Type': 'application/json'}, method='POST')
@@ -126,7 +131,7 @@ def knee_angle(pose, hip, knee, ankle):
 
 
 def extract_body_pose(landmarks):
-    ids = (11, 12, 23, 24, 25, 26, 27, 28)
+    ids = (11, 12)
     confidence = min(getattr(landmarks[i], 'visibility', 1.0) for i in ids)
     shoulder = (landmarks[11].y + landmarks[12].y) / 2
     hip = (landmarks[23].y + landmarks[24].y) / 2
@@ -143,7 +148,7 @@ def overlay(cv2, frame, landmarks, tracker, bridge):
     for index, det in enumerate(tracker.detectors):
         color = (255, 175, 80) if index == 0 else (80, 220, 255)
         label = f'P{index + 1}: ' + (
-            'CALIBRATE (STAND STILL)' if not det.ready else
+            'LOOKING FOR SHOULDERS' if not det.ready else
             'JUMP' if det.jumping else 'DUCK' if det.ducking else 'READY')
         cv2.putText(frame, label, (16 + index * mid, 32),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.65, color, 2)
@@ -152,16 +157,15 @@ def overlay(cv2, frame, landmarks, tracker, bridge):
                         (16 + index * mid, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
     for pose in landmarks:
         body = extract_body_pose(pose)
-        if 0.47 <= body.center_x <= 0.53:
-            continue
-        color = (255, 175, 80) if body.center_x < 0.5 else (80, 220, 255)
+        slot = tracker.player_at(body.center_x)
+        color = (255, 175, 80) if slot == 0 else (80, 220, 255) if slot == 1 else (120,120,120)
         for a, b in POSE_CONNECTIONS:
             cv2.line(frame, (int(pose[a].x*width), int(pose[a].y*height)),
                      (int(pose[b].x*width), int(pose[b].y*height)), color, 2)
         for i in (11, 12, 23, 24, 25, 26, 27, 28):
             cv2.circle(frame, (int(pose[i].x*width), int(pose[i].y*height)), 5, color, -1)
     status = ('CAMERA ONLY' if bridge is None else 'BACKEND CONNECTED' if bridge.connected else 'BACKEND OFFLINE')
-    cv2.putText(frame, f'{status}   C: recalibrate   Q: quit', (14, height - 14),
+    cv2.putText(frame, f'{status}   C: reset tracking   Q: quit', (14, height - 14),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.55, (110, 240, 120) if bridge and bridge.connected else
                 (180, 180, 255), 2)
 
@@ -179,7 +183,7 @@ def run(args):
     if not cap.isOpened():
         raise RuntimeError('Camera could not be opened. Try --scan, or --camera 0 / --camera 1.')
     bridge = None if args.no_send else GameBridge(args.backend)
-    tracker = TwoPlayerTracker(calibration_frames=args.calibration_frames,
+    tracker = TwoPlayerTracker(shoulder_only=True, calibration_frames=args.calibration_frames,
                                jump_ratio=args.jump_ratio, duck_ratio=args.duck_ratio)
     options = mp.tasks.vision.PoseLandmarkerOptions(
         base_options=mp.tasks.BaseOptions(model_asset_path=str(model)),
@@ -189,12 +193,15 @@ def run(args):
         min_pose_presence_confidence=0.55,
         min_tracking_confidence=0.55,
     )
+    cv2.namedWindow('SPACE ODYSSEY | Camera Tracking (MacBook)', cv2.WINDOW_NORMAL)
+    cv2.resizeWindow('SPACE ODYSSEY | Camera Tracking (MacBook)', 960, 540)
+    cv2.moveWindow('SPACE ODYSSEY | Camera Tracking (MacBook)', 30, 60)
     started = time.monotonic()
     last_stamp = -1
     last_heartbeat = -1e6
     missed = 0
-    print('Camera active. Stand upright in your own half until both labels read READY.')
-    print('P1 is LEFT in the preview, P2 RIGHT. C = recalibrate; Q/ESC = quit.')
+    print('Camera active. Keep your shoulders visible in your own half. Tracking starts immediately.')
+    print('P1 is LEFT in the preview, P2 RIGHT. C = reset tracking; Q/ESC = quit.')
     try:
         with mp.tasks.vision.PoseLandmarker.create_from_options(options) as landmarker:
             while True:
@@ -221,8 +228,8 @@ def run(args):
                         bridge.event(player, action)
                     else:
                         print('LOCAL TEST:', player, action)
-                if bridge and now-last_heartbeat >= 1.5:
-                    bridge.heartbeat(tracker.ready, 'P1/P2 shoulders tracked')
+                if bridge and now-last_heartbeat >= .5:
+                    bridge.heartbeat(tracker.ready, 'P1/P2 shoulders tracked', [d.ducking for d in tracker.detectors])
                     last_heartbeat = now
                 overlay(cv2, frame, result.pose_landmarks, tracker, bridge)
                 cv2.imshow('SPACE ODYSSEY | Camera Tracking (MacBook)', frame)
