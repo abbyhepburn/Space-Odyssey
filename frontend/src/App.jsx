@@ -1,7 +1,6 @@
 import PlanetLog from './components/PlanetLog';
 import InformationCatalog from './components/InformationCatalog';
 import useControllerUi from './hooks/useControllerUi';
-import useBrowserCamera from './hooks/useBrowserCamera';
 
 import React,{useEffect,useRef,useState} from 'react';
 import useGameSocket from './hooks/useGameSocket';
@@ -28,7 +27,6 @@ function Hold({children,down,up,...props}){
 }
 export default function App(){const {flight,status,connected,send}=useGameSocket();const g=(flight && Array.isArray(flight.players) && flight.players.length >= 2 && flight.players.every(p=>p && typeof p === 'object') && Array.isArray(flight.targets) && Array.isArray(flight.obstacles) && Array.isArray(flight.locked) && Array.isArray(flight.ship)) ? flight : initial;const keys=useRef(new Set());const [help,setHelp]=useState(false);const [thrustHeld,setThrustHeld]=useState(false);const [catalog,setCatalog]=useState(false);const [discovery,setDiscovery]=useState(null);const [hoveredDiscovery,setHoveredDiscovery]=useState(null);const [fullError,setFullError]=useState('');const [aspect,setAspect]=useState(innerWidth/innerHeight);const race=['COUNTDOWN','MISSION','RESULTS'].includes(g.phase)&&['RING_RACE','SURFACE_RUN','CRATER_LEAP','SAMPLE_HUNT','STORM_SHELTER'].includes(g.mission?.game_type);const split=['COUNTDOWN','MISSION','RESULTS'].includes(g.phase);const active=g.phase==='MISSION';const flying=['LAUNCH','NAVIGATION','TRAVEL'].includes(g.phase);const moves=g.mission?.movements||[];const debugControls=new URLSearchParams(window.location.search).get('debugControls')==='1';
 useControllerUi({game:g,ui:{help,catalog:g.phase==='NAVIGATION'&&catalog,discovery,information:g.phase==='READY'&&catalog},connected,send});
-const openCamera=useBrowserCamera(send);
 const phaseRef=useRef(g.phase);phaseRef.current=g.phase;
 const aimed=g.selection?.kind==='discovery'?discoveries.find(d=>d.id===g.selection.id):null;
 useEffect(()=>{if(g.inspected){setDiscovery(discoveries.find(d=>d.id===g.inspected)||null);setCatalog(false)}},[g.inspection_id]);
@@ -99,13 +97,13 @@ const sendAction=(p,m)=>send(`FLIGHT,${p},${m==='FLICK'?'UPWARD_FLICK':m}`);
 if(['READY','BOOT'].includes(g.phase))return <><SpaceOdysseyLaunch phase={g.phase} serverAge={g.age} disabled={!connected}
   onLaunchComplete={()=>{setHelp(false);setCatalog(false);send('FLIGHT,LAUNCH')}}
   onOpenControls={()=>setHelp(true)} onOpenDiscoveries={()=>setCatalog(true)} />
-  <ControllerOverlay game={g} status={status} connected={connected} openCamera={openCamera}/>{!connected&&<div className="connection-banner">Waiting for Python backend on port 8000…</div>}
+  <ControllerOverlay game={g} status={status} connected={connected}/>{!connected&&<div className="connection-banner">Waiting for Python backend on port 8000…</div>}
   {help&&<div className="help-layer"><section className="help-card"><button className="close" onClick={()=>setHelp(false)}>×</button><h2>Flight controls</h2><p><b>Player 1 · Pilot:</b> Push joystick forward to fly forward; pull backward to reverse. Move it left/right to turn. Press the joystick button to select a destination.</p><p><b>Player 2 · Stabilizer:</b> Tilt your remote left/right to keep the spacecraft upright.</p><p><b>Planet challenges:</b> Both players use their remotes to tilt, shake, flick upward and press the joystick button. In missions, tilt up to jump and push the joystick forward to duck.</p><button className="big-button" onClick={()=>setHelp(false)}>Back to launch</button></section></div>}
   {catalog&&<InformationCatalog items={discoveries} onClose={()=>setCatalog(false)}/>}
 </>;
 
 return <main className={`game revised ${race?'race-mode':''}`}><div className={`game-views ${split?'split':''}`}>{(split?[0,1]:[0]).map(i=><div className="view" key={i}><CockpitGame game={g} index={i} onDiscover={setDiscovery} onHover={setHoveredDiscovery}/>{split&&<span className={`player-badge player-${i+1}`}>PLAYER {i+1}</span>}</div>)}</div><div className="glass-noise"/>{g.damage_flash>0&&<div className="impact-flash"/>}
-<header className="simple-header"><strong>◈ ODYSSEY</strong><div className="header-score player-scoreboard"><span>P1 <b>{g.players[0]?.score||0}</b></span><span>P2 <b>{g.players[1]?.score||0}</b></span></div><div><button onClick={()=>setHelp(true)}>Controls</button><button onClick={full} aria-label="Fullscreen">⛶</button><button disabled={!connected} onClick={()=>send('FLIGHT,RESET')} aria-label="Restart expedition">↻</button></div></header><ControllerOverlay game={g} status={status} connected={connected} openCamera={openCamera}/>
+<header className="simple-header"><strong>◈ ODYSSEY</strong><div className="header-score player-scoreboard"><span>P1 <b>{g.players[0]?.score||0}</b></span><span>P2 <b>{g.players[1]?.score||0}</b></span></div><div><button onClick={()=>setHelp(true)}>Controls</button><button onClick={full} aria-label="Fullscreen">⛶</button><button disabled={!connected} onClick={()=>send('FLIGHT,RESET')} aria-label="Restart expedition">↻</button></div></header><ControllerOverlay game={g} status={status} connected={connected}/>
 {!connected&&<div className="connection-banner">Connecting to the game…</div>}
 {g.phase==='READY'&&<section className="start-card"><span className="section-label">TWO PLAYERS · ONE GALAXY · HEAD TO HEAD</span><h1>Let’s leave Earth.</h1><div className="crew-lessons"><div><MovementDemo action="THRUST"/><b>PLAYER 1 · PILOT</b><p>Joystick ↑/↓ · Forward / reverse<br/>Joystick ←/→ · Turn<br/>Joystick button · Select</p></div><div><MovementDemo action="TILT"/><b>PLAYER 2 · HELM</b><p>Tilt remote left / right<br/>Keep the ship level</p></div></div><button className="big-button" disabled={!connected||!flight} onClick={()=>send('FLIGHT,LAUNCH')}>Launch</button><small>Computer simulation available until the remotes are connected</small></section>}
 {g.phase==='LAUNCH'&&<AscentBubble/>}
