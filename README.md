@@ -1,123 +1,178 @@
-# Space Odyssey — 2-player planet party
+<div align="center">
 
-**October 18 integration:** use [UPDATE_2026-10-18.md](UPDATE_2026-10-18.md)
-for the current launch, controller menus/MPU telemetry, OpenCV setup, planet
-log and verification results. It supersedes historical status notes below.
+# 🚀 SPACE ODYSSEY
 
-A first-person planet exploration game with **two-player competitive 15-second mini-games**, a cinematic cockpit launch, real-object discoveries, and short, curated NASA-backed planet facts. Players jointly pilot a ship to a destination, then **compete for individual points** in the planet's mini-game.
+### Two explorers. One spacecraft. An entire universe to discover.
 
-The playable version supports keyboard controls and the ESP32/Pico remote input path. In missions, tilt a remote up to jump and push its joystick forward to duck. OpenCV camera tracking remains an optional local experiment; it requires macOS camera permission and has not been verified on this laptop. No FPGA is needed for the game graphics: your Mac renders the React/Three.js interface to a monitor.
+**A cooperative, AI-powered space adventure controlled by two custom-built wireless motion remotes.**
 
-## Run on a Mac — two terminals
+[**Play Space Odyssey**](https://spaceodyssey.work) · [**Source code**](https://github.com/abbyhepburn/Space-Odyssey)
 
-Requirements: Python 3.12 (recommended), Node.js and npm. From the project root:
+</div>
 
-**Terminal 1 — Python game backend**
+![Space Odyssey title screen, with the Initiate Launch button and orbital spacecraft visuals](docs/images/space-odyssey-title-screen.png)
 
-```bash
-cd backend
-python3.12 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-python -m uvicorn main:app --reload --host 127.0.0.1 --port 8000
+## 🌌 About the project
+
+**Space Odyssey** brings the excitement of motion-controlled games to a two-player journey through the solar system. Instead of conventional gamepads, players pilot a spacecraft using **hand-built ESP32 controllers** with motion sensors, analog joysticks, and buttons.
+
+Players explore planetary environments, take on themed challenges, and cooperate as a two-person crew. **Google Gemini** helps create planet-themed mission content, while the game uses defined gameplay mechanics to turn those missions into playable challenges.
+
+> **Current controls:** Space Odyssey uses the two physical handheld remotes. Webcam tracking, jumping, and ducking are **not** part of the current gameplay experience.
+
+## 🎮 In-game preview
+
+![Space Odyssey in-game cockpit showing Earth, the planetary log, speed, and player-specific controls](docs/images/space-odyssey-gameplay.png)
+
+*Inside the spacecraft: P1 controls flight using a joystick, while P2 tilts their remote to level the ship. Both controllers appear in the live status panel.*
+
+## 🕹️ How to play
+
+Each player uses a custom wireless remote. The game uses different inputs depending on the current challenge.
+
+| Input | Example role |
+| --- | --- |
+| **Joystick** | Fly, steer, and navigate menus |
+| **Tilt left / right** | Balance or level the spacecraft |
+| **Shake** | Interact with obstacles, including asteroid challenges |
+| **Flick upward** | Trigger special in-game actions |
+| **Joystick button** | Select or activate a context-dependent action |
+
+Two-player cooperation is central to the experience: the crew shares the journey, and each player can be assigned a different control task.
+
+## ⚙️ How it works
+
+```text
+Controller 1: ESP32 + MPU6050-compatible IMU + joystick
+                                        \
+                                         BLE advertisements
+                                        / 
+Controller 2: ESP32 + MPU9250 IMU + joystick
+                    |
+                    v
+            Raspberry Pi Pico 2 W
+                    |
+                USB serial
+                    |
+              Python backend
+                    |
+       Game state / cloud integration
+                    |
+         React + Three.js frontend
 ```
 
-If your Mac only has `python3` and it's a compatible version, use `python3 -m venv .venv`. Do not recreate a working environment unnecessarily. Store `GEMINI_API_KEY` in `backend/.env` (not in frontend or Git), and keep `SIMULATE_PICO=true` while using keyboard demo mode. **Never replace an existing `.env`.**
+- **Custom controllers:** Arduino C++ firmware reads I²C motion sensors and joystick input, detects gestures, and broadcasts controller updates over Bluetooth Low Energy (BLE).
+- **Pico 2 W bridge:** Receives both controllers' BLE advertisements and forwards decoded events and controller state over USB serial.
+- **Python backend:** Processes controller messages and bridges physical inputs to the game.
+- **3D frontend:** React, Vite, Three.js, and React Three Fiber render the space environment and flight UI.
+- **Generative AI:** Google Gemini provides planet-themed mission content through a constrained mission system.
 
-**Terminal 2 — React game frontend**
+## 🧰 Built with
 
-```bash
+| Area | Technologies |
+| --- | --- |
+| Firmware & hardware | ESP32, Raspberry Pi Pico 2 W, MPU6050-compatible IMU, MPU9250, analog joysticks, Arduino C++, I²C |
+| Wireless and serial | Bluetooth Low Energy advertising, USB serial |
+| Backend | Python |
+| Frontend & 3D | JavaScript, React, Vite, Three.js, React Three Fiber |
+| AI | Google Gemini API |
+| Development | Git, GitHub, VS Code, Arduino IDE |
+
+## 💻 Local setup
+
+The game has a deployed frontend at **[spaceodyssey.work](https://spaceodyssey.work)**. Running physical controllers still requires a local computer connected to the Pico 2 W and the project's Python bridge.
+
+### Prerequisites
+
+- Git and a local clone of this repository
+- Node.js and npm, if running the frontend locally
+- Python and the dependencies specified by `backend/requirements.txt` (Python **3.12** is a useful choice for compatibility with older pinned dependencies)
+- A Pico 2 W with the appropriate BLE receiver firmware, connected by USB
+- Two programmed ESP32 motion controllers
+- A Gemini API key for AI-backed mission features
+
+### 1. Set up Python
+
+From the repository root on Windows PowerShell:
+
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt
+```
+
+If `py -3.12` cannot find an interpreter, install Python 3.12 first. Using a virtual environment is recommended because newer Python releases may not have compatible prebuilt wheels for all pinned dependencies.
+
+### 2. Configure environment variables
+
+Create a **`.env`** file in the location expected by the backend configuration loader. Example values:
+
+```dotenv
+SIMULATE_PICO=false
+SERIAL_PORT=COM6
+VISION_ENABLED=false
+GEMINI_API_KEY=YOUR_PRIVATE_GEMINI_API_KEY
+GEMINI_MODEL=gemini-2.5-flash
+```
+
+Set `SERIAL_PORT` to the Pico's actual port (`COM6` is **only an example**). On macOS, the device name may look like `/dev/cu.usbmodem...`.
+
+**Never commit `.env` or expose API keys in screenshots.** If a key has been shared publicly, revoke and replace it.
+
+### 3. Start the hardware bridge
+
+Your team's demonstrated launcher command has this form:
+
+```powershell
+python start_game.py --cloud https://spaceodyssey.work --serial COM6 --port 6021
+```
+
+Run this from the **directory that actually contains `start_game.py`**, using Python from your virtual environment. For example, if the launcher is at the repository root:
+
+```powershell
+.\.venv\Scripts\python.exe .\start_game.py --cloud https://spaceodyssey.work --serial COM6 --port 6021
+```
+
+The `--port` option is the local service port, **not** the Pico's COM port. Keep the Arduino Serial Monitor closed while the Python program owns the Pico serial connection.
+
+> **Maintainer note:** Confirm the launcher's file location and supported flags against the current branch before finalizing this section; repository files were not available for independent verification when this README was prepared.
+
+### 4. Optional: start the web frontend locally
+
+```powershell
 cd frontend
 npm install
 npm run dev
 ```
 
-Open the printed Vite address (usually `http://127.0.0.1:5173`). Its proxy forwards backend traffic to port `8000`. Keep both terminals running. The FastAPI developer documentation, when enabled, is at `http://127.0.0.1:8000/docs`.
+Open the local URL printed by Vite, typically `http://localhost:5173/`. To play the deployed game instead, open [spaceodyssey.work](https://spaceodyssey.work).
 
-### Using an external monitor
+## 🔧 Controller debugging
 
-Connect the Mac to the monitor by HDMI/USB-C. Go to **System Settings → Displays → Extend Display**. Move the game browser to the external monitor and use fullscreen. To try the optional local OpenCV tracker, follow [CAMERA_SETUP_MAC.md](CAMERA_SETUP_MAC.md); the tracker needs camera access and a visible two-player test.
+If a controller does not respond:
 
-## Game sequence
+1. Confirm its ESP32 firmware is uploaded and the Pico bridge is running.
+2. Check that the Pico appears on the expected USB serial port and that no other application has opened it.
+3. On the ESP32, verify that the motion sensor is detected over I²C: **SDA → GPIO21, SCL → GPIO22**, with 3.3 V and common ground.
+4. Check serial diagnostics for changing accelerometer readings, shake/flick detections, and transmitted BLE packets.
+5. Verify that the Pico forwards `REMOTE,P1,...` and `REMOTE,P2,...` messages to the Python backend.
 
-1. Start with an animated cockpit menu. Click **Initiate Launch**, watch the ~13-second skippable boot sequence, then take control from Earth.
-2. Player 1 handles forward/reverse thrust and turning; Player 2 keeps the ship level. Fly toward a planet and select it when in range.
-3. The Gemini-generated *or validated local fallback* mission briefing explains a specific game type, short controls, and a curated NASA planet fact.
-4. Each player plays in a split-screen 3D view. **Every mission lasts 15 seconds**; events are evenly distributed from approximately second 1 through 14.3 to avoid dead time.
-5. The player with the higher **individual** score wins. Ties are possible. Select **New Game Here** or keep exploring.
+## 🧩 Challenges and lessons
 
-Ground missions run only on rocky worlds — Mercury, Venus, Earth and Mars — and show terrain, a horizon, rocks and planet-specific lighting. Gas giants always use orbital courses or space challenges, not a fictional solid surface. All planet scales/orbits are illustrative, not simulated accurately.
+- **Mixed motion sensors:** Integrating two different IMUs and working with direct I²C registers when a sensor library did not initialize a device correctly.
+- **Gesture recognition:** Distinguishing shaking from flicking, filtering noise, and calibrating motion thresholds.
+- **Wireless reliability:** Handling BLE advertisement loss, packet sequencing, and state recovery for responsive steering.
+- **Full-stack integration:** Connecting ESP32 firmware, a Pico receiver, Python, and a real-time 3D web experience.
 
-## Controls in keyboard demo mode
+## ✨ What's next
 
-| Action | P1 keyboard test | P2 keyboard test | Eventual physical control |
-|---|---|---|---|
-| Fly forward / reverse | Hold F / S | — | P1 joystick forward / backward |
-| Turn spacecraft | A / D | — | P1 joystick left / right |
-| Keep spacecraft level | — | J / L or left / right arrows | P2 remote tilt left / right |
-| Select planet or start | E / Enter | — | P1 joystick button |
-| Mission left/right steer or tilt | A / D | Left/right arrows | Each remote's tilt/joystick |
-| Jump | Space | I | Tilt remote up |
-| Duck | Hold C | Hold K | Push joystick forward |
-| Shake | Q | U | Remote accelerometer shake |
-| Press joystick | E | O | Remote button |
-| Flick upward | R | P | Remote accelerometer flick |
+More planetary challenges, tighter cooperative mechanics, refined gesture detection, and improved controller enclosures.
 
-The production UI displays **physical movements only**, not these keyboard
-shortcuts. Test keys work regardless; append `?debugControls=1` to the local
-browser URL to show test buttons. See [REMOTE_AND_KEYBOARD_TESTING.md](REMOTE_AND_KEYBOARD_TESTING.md).
+---
 
-The game backend receives normalized strings such as `FLIGHT,P1,JUMP`, `FLIGHT,P2,DUCK_ON`, `FLIGHT,P1,SHAKE`, `FLIGHT,P2,UPWARD_FLICK` and `FLIGHT,P1,AXIS,1,0`. Tilt-up jump and joystick-forward duck require the updated remote firmware and a live hardware check.
+<div align="center">
 
-## Different mini-games
+**SPACE ODYSSEY — Two pilots. One mission.** 🪐
 
-- **Surface Run:** jump hurdles and duck under barriers on a real-looking planetary terrain.
-- **Crater Leap:** jump pits and flick the remote upward to cross ridges.
-- **Sample Hunt:** tilt toward glowing minerals and press to collect them before your opponent.
-- **Storm Shelter:** duck incoming storm fronts and shake to activate outpost generators.
-- **Asteroid Dodge:** steer away or shake to destroy asteroids in your own lane.
-- **Meteor Break:** time your shake to break incoming meteorites.
-- **Orbital Slalom:** dodge rocks by steering; no extra/unrelated sync action.
-- **Beacon Relay:** steer toward signals and press to collect beacons.
-- **Ring Race:** jump/duck around an illustrative orbital course near Saturn's rings.
+Built for **SwampHacks XII**.
 
-Each implemented game type has its own **fixed and tested mechanics**. Gemini can vary the narrative and title, but cannot invent hardware inputs or live arbitrary game code. Modes avoid repeating the previous two on the same planet when alternatives exist.
-
-### Meaningful optional sync
-
-Several challenges award **+8 points to each player** when the players match a relevant action within 0.8 seconds. For example, synchronize **JUMP** in Surface Run, **FLICK** in Crater Leap, **PRESS** in Sample Hunt/Beacon Relay, or **SHAKE** in storm/asteroid games. It also gives a brief defensive advantage to both players; individual rankings remain competitive. Orbital Slalom has no sync action because an unrelated shake would not fit that game's mechanic. Sync is *not required* to play or win.
-
-## Space encyclopedia
-
-In flight, click the models/labels or open **Discoveries** to browse **15 real space objects** including ISS, Hubble, Webb, GOES-16, Landsat 9, GPS III, Halley's Comet, the Sun, Earth's Moon, Europa, Io, Titan, Orion Nebula, Crab Nebula, and Andromeda Galaxy. Each information panel contains categorized facts, educational details, and a link to NASA, NOAA or another science agency. **Positions are illustrative** — distant stars, galaxies and nebulae are not physically orbiting the planets.
-
-## Tests
-
-```bash
-cd backend
-python -m pytest -q
-cd ../frontend
-npm run build
-```
-
-The backend suite passed **78 tests** in this review environment; **10 JavaScript tests** also passed. JSX source also passed a TypeScript syntax parsing check. **The frontend production build and browser/hardware/camera tests could not be completed in the development environment because npm dependency installation was unavailable**; run `npm install && npm run build` on your Mac. If any errors occur, share the console/terminal output. We did not test a live Gemini API key.
-
-### Important implementation files
-
-- `backend/flight_game.py` — planet selection, motion event handling, game type rules, timed events, individual scores, winner and curated education.
-- `frontend/src/App.jsx` — display state, actions, scoreboard, briefings, discoverable facts and controls.
-- `frontend/src/components/SurfaceLandscape.jsx` — rocky planet ground scenes.
-- `frontend/src/components/CockpitGame.jsx` — cockpit, missions, 3D satellites and star objects.
-- `frontend/src/components/SpaceOdysseyLaunch.jsx` + `.css` — cinematic opening and skippable startup.
-- `backend/camera_vision.py` — optional local OpenCV/MediaPipe camera tracker (requires camera permission and live testing).
-
-Local scores currently reset when the game restarts. Persistent per-player leaderboards/login are not part of this update.
-
-## Educational game variety update
-
-See [GEMINI_VARIETY_UPDATE.md](GEMINI_VARIETY_UPDATE.md) for the current 11 mission families, new gravity-gate and relay-repair games, three game-layout rules, cross-planet anti-repeat selection, rotating NASA-linked facts, keyboard stand-ins, and verification details.
-
-
-## Forward-thrust test before merging
-
-Use the **real React/Three.js game** to review thrust, steering and reverse. Hold F to move forward, S to reverse, and A/D to steer. The HUD gauge uses the backend-reported throttle. Remote input messages share the same flight authority; the physical firmware still needs implementation and integration testing.
+</div>
