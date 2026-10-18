@@ -6,6 +6,14 @@ ControllerPacket packet(uint8_t sequence,char action='I',int8_t forward=0,int8_t
  ControllerPacket result;assert(decodeController(bytes,sizeof(bytes),result));return result;
 }
 int main(){
+ uint8_t extended[23]={255,255,'A','L','2','I',10,0,0,0,1};
+ extended[15]=213;extended[16]=3; // az = 981 -> 9.81 m/s2
+ extended[17]=156;extended[18]=255; // gx = -100 -> -1 rad/s
+ ControllerPacket decoded;assert(decodeController(extended,23,decoded));
+ assert(decoded.telemetry && decoded.imuOK && decoded.imu[2]==981 && decoded.imu[3]==-100);
+ Player diagnostic;diagnostic.accept(decoded,100);assert(diagnostic.imu[2]==981);
+ extended[10]=0;extended[6]=11;assert(decodeController(extended,23,decoded));diagnostic.accept(decoded,180);assert(!diagnostic.imuOK);
+ extended[10]=2;assert(!decodeController(extended,23,decoded));
  Player p;
  assert(!p.accept(packet(20,'B',100),100)); // reconnect suppresses old button
  assert(p.forward==100 && p.fresh(200));

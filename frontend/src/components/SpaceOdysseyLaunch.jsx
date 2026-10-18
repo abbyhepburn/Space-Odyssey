@@ -51,13 +51,15 @@ function Icon({ name }) {
 
 export default function SpaceOdysseyLaunch({
   onLaunchComplete,
+  phase = 'READY',
+  serverAge = 0,
   onOpenControls,
   onOpenDiscoveries,
   disabled = false,
   title = 'SPACE ODYSSEY',
 }) {
-  const [mode, setMode] = useState('menu'); // menu | intro
-  const [elapsed, setElapsed] = useState(0);
+  const mode=phase==='BOOT'?'intro':'menu'; // menu | intro
+  const elapsed=serverAge*1000;
   const [audio, setAudio] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
   const stage = useMemo(() => [...BOOT_STAGES].reverse().find(s => elapsed >= s.at) || BOOT_STAGES[0], [elapsed]);
@@ -80,35 +82,14 @@ export default function SpaceOdysseyLaunch({
 
   const start = () => {
     if(disabled)return;
-    completedRef.current = false;
-    setElapsed(0);
-    setMode('intro');
+    onLaunchComplete?.();
   };
-
-  useEffect(() => {
-    if (mode !== 'intro') return;
-    if (reducedMotion) {
-      finish();
-      return;
-    }
-    let frame;
-    const startAt = performance.now();
-    const tick = (now) => {
-      const next = Math.min(INTRO_MS, now - startAt);
-      setElapsed(next);
-      if (next >= INTRO_MS) finish();
-      else frame = requestAnimationFrame(tick);
-    };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-    // onLaunchComplete is tracked by a ref so callback identity changes do not restart playback.
-  }, [mode, reducedMotion]);
 
   useEffect(() => {
     function onKey(event) {
       if (mode === 'intro' && ['Escape', 'Enter', ' '].includes(event.key)) {
         event.preventDefault();
-        finish();
+        return;
       } else if (mode === 'menu' && event.key === 'Enter' && event.target?.tagName !== 'BUTTON') {
         event.preventDefault();
         start();
@@ -165,7 +146,7 @@ export default function SpaceOdysseyLaunch({
             <button type="button" className="so-launch__primary" onClick={start} disabled={disabled}>{disabled?'CONNECTING TO SHIP':'INITIATE LAUNCH'} <Icon name="arrow" /></button>
             <div className="so-launch__secondary-row">
               <button type="button" onClick={onOpenControls} disabled={!onOpenControls}>FLIGHT MANUAL</button>
-              <button type="button" onClick={onOpenDiscoveries} disabled={!onOpenDiscoveries}>DISCOVERIES</button>
+              <button type="button" onClick={onOpenDiscoveries} disabled={!onOpenDiscoveries}>PLANET LOG</button>
             </div>
           </div>
           <div className="so-launch__keyboard">TWO PILOTS · READY FOR LAUNCH</div>
@@ -184,7 +165,7 @@ export default function SpaceOdysseyLaunch({
           </ol>
           <div className="launch-progress" role="progressbar" aria-label="Launch sequence" aria-valuemin="0" aria-valuemax="100" aria-valuenow={progress}><span style={{width:`${progress}%`}}/></div>
           <div className="launch-progress__caption"><span>LAUNCH SEQUENCE</span><span>{progress}%</span></div>
-          <button className="so-launch__skip" type="button" onClick={finish}>SKIP INTRO ↗</button>
+          <span className="so-launch__skip">Preparing flight · please wait</span>
         </main>
       )}
       <footer className="so-launch__bottom"><span>EARTH ORBIT <b>◆</b> {isIntro?'CREWED FLIGHT':'SOL 03'}</span><span>{isIntro?'PRE-FLIGHT CHECKLIST':'SPACE ODYSSEY // EXPEDITION PROGRAM'}</span><span>{isIntro?'SYSTEMS CHECK IN PROGRESS':'CREW ACCESS ENABLED'}</span></footer>

@@ -61,7 +61,7 @@ class Engine:
             if len(parts)!=3 or parts[1] not in ('P1','P2') or parts[2] not in ('JUMP','DUCK_ON','DUCK_OFF'):
                 raise ValueError('Invalid remote action event')
             self.external_camera_last=time.monotonic();self.external_camera_expired=False
-            self.status['vision']='Remote controls active'
+            self.status['vision']='Camera connected'
             self.flight.command(f'FLIGHT,{parts[1]},{parts[2]}',source='vision')
             return
 

@@ -89,3 +89,13 @@ c++ -std=c++11 -Wall -Wextra -Werror hardware/tests/controller_protocol.cpp -o /
 ```
 
 Build verification: all three sketches compiled successfully with ESP32 core 3.3.12 / Arduino-Pico 6.3.0; 128 backend tests passed. No boards were flashed by this change, and no Pico serial device was connected during verification.
+
+## Current update: MPU diagnostics and sensitive flick
+
+Flash **both ESP32s and the Pico** from this revision for the MPU data tab. The extended 23-byte BLE snapshot adds IMU health plus six signed 16-bit readings scaled by 100 (acceleration m/s² and gyro rad/s). Old 7/10-byte snapshots still work but cannot show MPU diagnostics. Flick threshold is now 5.0 m/s², with a 1.8 release threshold. Joystick readings use median filtering and a smooth dead zone.
+
+Open Controller setup / MPU sensor data in the game. IMU READ FAILED means the sensor cannot be read; changing game settings cannot repair disconnected I2C wiring. Check the sensor power, ground, SDA21/SCL22 and 0x68/0x69 address. Tilt up triggers jump, joystick forward holds duck in appropriate games, and returning to center releases it. Left/right tilt remains flight roll for P2.
+
+Camera tracking is optional. The launcher defaults to remotes only; pass `--camera` to open the laptop OpenCV preview, or use the website's Open motion camera button in Chrome. Only movement events are forwarded, not camera images. Keep the Pico connected to the laptop and pair the current website code after restarting the launcher.
+
+Planet log saves the first **completed** round per planet for this session. Leaving early does not assign a win. Replays keep the original result; restarting/exiting the game clears it. The modest higher-gravity jump bonus is a visual arcade effect only, not a physics simulation.

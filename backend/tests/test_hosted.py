@@ -21,7 +21,7 @@ def test_hosted_sessions_are_isolated_and_bridge_is_authenticated(monkeypatch):
             code=first['status']['pairing_code']
             assert code!=second['status']['pairing_code']
             one.send_json({'command':'FLIGHT,LAUNCH'})
-            until(one,lambda s:s['flight']['phase']=='LAUNCH')
+            until(one,lambda s:s['flight']['phase']=='BOOT')
             assert two.receive_json()['flight']['phase']=='READY'
             with client.websocket_connect('/ws/bridge') as bridge:
                 bridge.send_json({'pairing_code':code})

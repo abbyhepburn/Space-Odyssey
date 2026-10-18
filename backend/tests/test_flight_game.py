@@ -10,7 +10,7 @@ def fly(g,seconds=3):
         g.command('FLIGHT,P1,AXIS,1,0');g.tick(.05)
 
 def test_thrust_translates_and_selection_requires_approach():
-    g=FlightGame();g.command('FLIGHT,LAUNCH');advance(g,5.1)
+    g=FlightGame();g.command('FLIGHT,LAUNCH');advance(g,15.1)
     assert g.phase=='NAVIGATION' and g.target() is None
     g.ship=[0.,14.,-15.] # Start the Saturn approach independently of Earth departure.
     before=g.ship[:];distance=g.targets()[1]['distance'];fly(g)
@@ -27,10 +27,10 @@ def test_axis_validation():
 def test_select_brief_mission_and_reset(monkeypatch):
     monkeypatch.delenv('GEMINI_API_KEY',raising=False)
     async def run():
-        g=FlightGame();g.command('FLIGHT,LAUNCH');advance(g,5.1);g.ship=[0.,14.,-15.];fly(g)
+        g=FlightGame();g.command('FLIGHT,LAUNCH');advance(g,15.1);g.ship=[0.,14.,-15.];fly(g)
         g.command('FLIGHT,P2,SELECT');assert g.phase=='NAVIGATION'
         g.command('FLIGHT,P1,SELECT');assert g.phase=='TRAVEL'
-        await g.task;advance(g,4.1);assert g.phase=='BRIEFING'
+        await g.task;advance(g,6.1);assert g.phase=='BRIEFING'
         assert g.mission.time_limit_s==15 and 1<=len(g.mission.movements)<=2
         g.command('FLIGHT,P1,SELECT');assert g.phase=='COUNTDOWN'
         advance(g,3.05);assert g.phase=='MISSION' and g.age<.1
@@ -281,7 +281,7 @@ def test_gravity_sling_requires_align_and_flick_and_has_relevant_sync():
 
 def test_analog_forward_thrust_and_f_release():
     """Remote joystick-forward and laptop F share normalized P1 AXIS X."""
-    g=FlightGame();g.command('FLIGHT,LAUNCH');advance(g,5.1)
+    g=FlightGame();g.command('FLIGHT,LAUNCH');advance(g,15.1)
     start=g.ship[:]
     for _ in range(22):
         g.command('FLIGHT,P1,AXIS,0.5,0')
@@ -324,7 +324,7 @@ def test_ground_mission_is_directly_requestable_on_rocky_planets(monkeypatch):
 
 
 def test_reverse_throttle_moves_ship_backwards_and_stops():
-    g=FlightGame();g.command('FLIGHT,LAUNCH');advance(g,5.1)
+    g=FlightGame();g.command('FLIGHT,LAUNCH');advance(g,15.1)
     initial_z=g.ship[2]
     for _ in range(20):
         g.command('FLIGHT,P1,AXIS,-1,0');g.tick(.05)
@@ -338,7 +338,7 @@ def test_reverse_throttle_moves_ship_backwards_and_stops():
 
 
 def test_p1_steers_ship_and_p2_only_stabilizes_roll():
-    g=FlightGame();g.command('FLIGHT,LAUNCH');advance(g,5.1)
+    g=FlightGame();g.command('FLIGHT,LAUNCH');advance(g,15.1)
     start_yaw=g.players[0]['yaw'];start_roll=g.roll
     for _ in range(12):
         g.command('FLIGHT,P2,AXIS,1,-1');g.tick(.05)
@@ -351,7 +351,7 @@ def test_p1_steers_ship_and_p2_only_stabilizes_roll():
 
 
 def test_reversing_after_forward_thrust_changes_signed_speed():
-    g=FlightGame();g.command('FLIGHT,LAUNCH');advance(g,5.1)
+    g=FlightGame();g.command('FLIGHT,LAUNCH');advance(g,15.1)
     for _ in range(12):
         g.command('FLIGHT,P1,AXIS,1,0');g.tick(.05)
     assert g.speed>0
@@ -363,7 +363,7 @@ def test_earth_departure_is_beside_earth_and_can_accelerate():
     g=FlightGame();earth=next(t for t in g.targets() if t['planet']=='EARTH')
     assert g.ship[0]-earth['position'][0]==40
     assert g.ship[1]==earth['position'][1]
-    g.command('FLIGHT,LAUNCH');advance(g,5.1)
+    g.command('FLIGHT,LAUNCH');advance(g,15.1)
     for _ in range(30):
         g.command('FLIGHT,P1,AXIS,1,0');g.tick(.05)
     assert g.speed>25 and not g.thrust_blocked

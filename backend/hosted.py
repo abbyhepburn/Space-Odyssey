@@ -61,7 +61,7 @@ async def laptop_bridge(ws):
         while True:
             data=await ws.receive_json()
             kind=data.get('kind');value=data.get('data')
-            if kind=='line' and isinstance(value,str) and len(value)<100 and value.startswith('REMOTE,'):
+            if kind=='line' and isinstance(value,str) and len(value)<180 and value.startswith('REMOTE,'):
                 e.submit('line',value)
             elif kind=='input' and isinstance(value,str) and value in {f'INPUT,P{i},{a}' for i in (1,2) for a in ('JUMP','DUCK_ON','DUCK_OFF')}:
                 e.submit('input',value)
