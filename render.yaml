@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: space-odyssey
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    autoDeployTrigger: off
+    domains:
+      - spaceodyssey.work
+    envVars:
+      - key: SPACE_ODYSSEY_HOSTED
+        value: "true"
+      - key: SIMULATE_PICO
+        value: "true"
+      - key: VISION_ENABLED
+        value: "false"
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash

@@ -13,6 +13,8 @@ const palette={
 export const isSurfaceGame=(planet,mode)=>['MERCURY','VENUS','EARTH','MARS'].includes(planet)&&['SURFACE_RUN','CRATER_LEAP','SAMPLE_HUNT','STORM_SHELTER'].includes(mode);
 
 function Ground({colors}){
+ const texture=useMemo(()=>{const c=document.createElement('canvas');c.width=c.height=256;const x=c.getContext('2d');let seed=311;const rnd=()=>((seed=seed*16807%2147483647)/2147483647);x.fillStyle='#aaaaaa';x.fillRect(0,0,256,256);for(let i=0;i<12000;i++){const v=90+Math.floor(rnd()*110);x.fillStyle=`rgb(${v},${v},${v})`;x.fillRect(rnd()*256,rnd()*256,1+rnd()*2,1+rnd()*2)}const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(25,100);return t},[]);
+ useEffect(()=>()=>texture.dispose(),[texture]);
  const geometry=useMemo(()=>{
   const g=new THREE.PlaneGeometry(220,1200,52,180);g.rotateX(-Math.PI/2);
   const a=g.attributes.position;
@@ -25,7 +27,7 @@ function Ground({colors}){
   g.computeVertexNormals();return g;
  },[]);
  useEffect(()=>()=>geometry.dispose(),[geometry]);
- return <mesh geometry={geometry} position={[0,-2.5,-380]} receiveShadow><meshStandardMaterial color={colors.ground} roughness={1} side={THREE.DoubleSide}/></mesh>;
+ return <mesh geometry={geometry} position={[0,-2.5,-380]} receiveShadow><meshStandardMaterial color={colors.ground} map={texture} bumpMap={texture} bumpScale={.12} roughness={1} side={THREE.DoubleSide}/></mesh>;
 }
 function Sky({colors}){
  const material=useMemo(()=>new THREE.ShaderMaterial({side:THREE.BackSide,depthWrite:false,uniforms:{zenith:{value:new THREE.Color(colors.sky)},horizon:{value:new THREE.Color(colors.horizon)}},vertexShader:'varying vec3 dir;void main(){dir=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',fragmentShader:'uniform vec3 zenith;uniform vec3 horizon;varying vec3 dir;void main(){float h=smoothstep(-.12,.64,normalize(dir).y);vec3 col=mix(horizon,zenith,h);gl_FragColor=vec4(col,1.0);}' }),[colors]);

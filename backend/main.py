@@ -18,6 +18,7 @@ from vision import VisionWorker
 from exploration import Exploration
 from flight_game import FlightGame
 from control_inputs import remote_to_flight
+import hosted
 
 load_dotenv(os.getenv('SPACE_ODYSSEY_ENV', str(Path(__file__).with_name('.env'))))
 
@@ -31,9 +32,10 @@ class Engine:
         self.exploration=Exploration(self.simulated)
         self.flight=FlightGame(self.simulated)
         self.state=vars(State()).copy(); self.queue=asyncio.Queue(maxsize=2048)
+        self.cloud_queue=asyncio.Queue(maxsize=128)
         self.clients=set(); self.bridge=None; self.vision=None; self.tasks=[]
         self.capabilities={'jump':self.simulated,'duck':self.simulated}
-        self.status={'usb':self.simulated,'mode':'SIMULATOR' if self.simulated else 'PICO USB','vision':'Disabled — demo inputs available','gemini':'Local mission catalog','message':''}
+        self.status={'usb':self.simulated,'mode':'SIMULATOR' if self.simulated else 'PICO USB','vision':'Camera not connected','gemini':'Local mission catalog','message':''}
         self.active=None; self.pending=None; self.mission_index=0; self.generating=False; self.epoch=0; self.last_state=0
         self.retry_at=0; self.mission_task=None
 
@@ -41,6 +43,8 @@ class Engine:
         return {'type':'snapshot','state':self.state,'mission':self.active,'pending':bool(self.pending) or self.generating,'status':self.status,'capabilities':self.capabilities,'exploration':self.exploration.snapshot(),'flight':self.flight.snapshot()}
 
     def submit(self, kind, data):
+        if os.getenv('SPACE_ODYSSEY_HOST_URL') and kind in ('line','input'):
+            with contextlib.suppress(asyncio.QueueFull):self.cloud_queue.put_nowait((time.monotonic(),kind,data))
         # Scheduled on event loop by thread-safe callbacks; bounded queue drops overload.
         with contextlib.suppress(asyncio.QueueFull): self.queue.put_nowait((kind,data))
 
@@ -63,7 +67,7 @@ class Engine:
         command_line(command)
         if command.startswith(('SET_MISSION','CAPABILITIES')): raise ValueError('Reserved backend command')
         if command.startswith('INPUT') and not self.simulated:
-            raise ValueError('Demo inputs require simulator mode; prevents duplicate BLE run events')
+            raise ValueError('Simulator inputs require simulator mode; prevents duplicate BLE run events')
         if command=='RESET':
             self.epoch+=1; self.active=None; self.pending=None
         self.send(command)
@@ -94,17 +98,17 @@ class Engine:
             if kind=='input':
                 with contextlib.suppress(ValueError):
                     parts=data.split(',')
-                    if self.flight.phase=='MISSION' and len(parts)==3:
+                    if len(parts)==3 and parts[0]=='INPUT' and parts[1] in ('P1','P2'):
+                        # Camera and keyboard feed the same authority in all phases.
+                        # Held duck may begin during the preparation countdown.
                         self.flight.command(f'FLIGHT,{parts[1]},{parts[2]}',source='vision')
-                    elif self.exploration.outcome=='ACTIVE' and len(parts)==3:
-                        self.exploration.action(parts[1], {'DUCK_ON':'DUCK','DUCK_OFF':'DUCK_OFF','JUMP':'JUMP'}.get(parts[2],parts[2]))
-                    else: self.send(data)
             elif kind=='usb':
                 connected,message=data; self.status.update(usb=connected,message=message)
                 if connected:
                     self.last_state=time.monotonic()
                     self.send(f"CAPABILITIES,{int(self.capabilities['jump'])},{int(self.capabilities['duck'])}")
                 else:
+                    for player in ('P1','P2'):self.flight.command(f'FLIGHT,{player},DISCONNECTED',source='remote')
                     self.epoch+=1; self.active=None; self.pending=None
             elif kind=='vision':
                 ready,message=data; self.status['vision']=message
@@ -168,7 +172,10 @@ class Engine:
         if os.getenv('VISION_ENABLED','false').lower()=='true':
             self.vision=VisionWorker(callback('input'),callback('vision')); self.vision.start()
         self.tasks=[asyncio.create_task(self.consume()),asyncio.create_task(self.clock())]
+        if os.getenv('SPACE_ODYSSEY_HOST_URL'):self.tasks.append(asyncio.create_task(hosted.forward_to_host(self)))
     async def close(self):
+        from vision_route import stop_camera_process
+        await stop_camera_process(self)
         if self.flight.task:
             self.flight.task.cancel()
             await asyncio.gather(self.flight.task,return_exceptions=True)
@@ -219,16 +226,20 @@ async def flight_gemini_status():
 
 @app.post('/api/missions/generate')
 async def missions():
+    if hosted.enabled():raise HTTPException(403,'Use your private game connection')
     e=app.state.engine
     if e.state['phase']!='RACE' or e.active or e.pending or e.generating: raise HTTPException(409,'Wait for the next mission boundary')
     e.launch_mission(); return {'queued':True}
 @app.post('/api/control')
 async def control(body:Control):
+    if hosted.enabled():raise HTTPException(403,'Use your private game connection')
     try: app.state.engine.control(body.command)
     except ValueError as exc: raise HTTPException(400,str(exc))
     return {'ok':True}
 @app.websocket('/ws/game')
 async def game(ws:WebSocket):
+    if hosted.enabled():
+        await hosted.browser_game(ws,Engine);return
     # Local-only server; prevent unrelated browser sites driving attached hardware.
     origin=ws.headers.get('origin','')
     from urllib.parse import urlparse
@@ -252,3 +263,14 @@ async def game(ws:WebSocket):
             except (ValueError,TypeError) as exc: e.status['message']=str(exc)
     except (WebSocketDisconnect,RuntimeError): pass
     finally: e.clients.discard(ws)
+
+@app.websocket('/ws/bridge')
+async def bridge_socket(ws:WebSocket):
+    if not hosted.enabled():
+        await ws.close(code=1008);return
+    await hosted.laptop_bridge(ws)
+
+# Serve the exact production build beside its API and WebSocket endpoint.
+from fastapi.staticfiles import StaticFiles
+static_dir=Path(__file__).resolve().parent.parent/'frontend'/'dist'
+if static_dir.exists():app.mount('/',StaticFiles(directory=static_dir,html=True),name='game')

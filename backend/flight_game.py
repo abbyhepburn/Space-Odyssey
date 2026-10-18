@@ -4,12 +4,15 @@ import math
 import os
 import random
 import logging
+from gemini_runtime import cooldown_remaining, record_failure
+from game_timing import (COUNTDOWN_SECONDS, WARNING_LEAD, RESPONSE_WINDOW, INPUT_GRACE, TRACK_SPEED, BODY_MODES, BODY_KINDS, encounter_times, timing_snapshot)
 from flight_science_facts import SCIENCE_QUESTIONS
+from targeting import crosshair_target
 from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 # Compact demo destinations. Units intentionally do not represent real solar distances.
-DESTINATIONS=[('MARS',-110.,14.,-190.),('SATURN',0.,14.,-220.),('JUPITER',110.,14.,-200.),('NEPTUNE',200.,14.,-160.),('MERCURY',-205.,14.,-100.),('VENUS',-175.,14.,-165.),('URANUS',205.,14.,-40.),('EARTH',0.,-36.,-12.)]
+DESTINATIONS=[('MARS',-110.,14.,-190.),('SATURN',0.,14.,-220.),('JUPITER',110.,14.,-200.),('NEPTUNE',200.,14.,-160.),('MERCURY',-205.,14.,-100.),('VENUS',-175.,14.,-165.),('URANUS',205.,14.,-40.),('EARTH',-55.,14.,-200.)]
 MODEL_ALIASES={}
 logger = logging.getLogger(__name__)
 # Curated, stable NASA-backed facts. Gemini may theme games, never invent the science.
@@ -78,7 +81,7 @@ MODE_LESSONS={
  'GRAVITY_SLING':'Gravity assists use planetary gravity to change spacecraft trajectories; fictional gates reward precise flick timing.',
  'SCIENCE_QUIZ':'Choose a correct answer from a pre-verified NASA-backed science question.'}
 
-MODES=('ASTEROID_DODGE','RING_RACE','ORBIT_SLALOM','METEOR_BREAK','BEACON_RELAY','RELAY_REPAIR','GRAVITY_SLING','SCIENCE_QUIZ')+SURFACE_MODES
+MODES=('ASTEROID_DODGE','RING_RACE','ORBIT_SLALOM','METEOR_BREAK','BEACON_RELAY','RELAY_REPAIR','GRAVITY_SLING')+SURFACE_MODES
 MOVES={'SURFACE_RUN':('JUMP','DUCK'),'CRATER_LEAP':('JUMP','FLICK'),'SAMPLE_HUNT':('TILT','PRESS'),'STORM_SHELTER':('DUCK','SHAKE'),'ASTEROID_DODGE':('STEER','SHAKE'),'RING_RACE':('JUMP','DUCK'),'ORBIT_SLALOM':('STEER',),'METEOR_BREAK':('SHAKE',),'BEACON_RELAY':('STEER','PRESS'),'RELAY_REPAIR':('TILT','SHAKE'),'GRAVITY_SLING':('STEER','FLICK'),'SCIENCE_QUIZ':('TILT','PRESS')}
 SCIENCE_MODES=frozenset(('SCIENCE_QUIZ','SAMPLE_HUNT','STORM_SHELTER','RELAY_REPAIR','BEACON_RELAY'))
 ACTION_MODES=frozenset(MODES)-SCIENCE_MODES
@@ -97,7 +100,7 @@ class GameMission(BaseModel):
     briefing: str=Field(min_length=5,max_length=120)
     challenge_style: Literal['STANDARD']
     movements: list[Movement]=Field(min_length=1,max_length=2)
-    obstacle_count: int=Field(ge=5,le=10)
+    obstacle_count: int=Field(ge=4,le=10)
     time_limit_s: int=Field(ge=15,le=15)
     sync_boost: bool=True
     # AI can choose one implemented, gameplay-visible encounter pattern.
@@ -112,7 +115,7 @@ class GameMission(BaseModel):
         if expected_style and self.challenge_style!=expected_style:raise ValueError('Challenge layout not selected for this round')
         if [m.control for m in self.movements]!=list(MOVES[self.game_type]):raise ValueError('Unsupported movement set')
         if self.game_type=='SCIENCE_QUIZ' and self.obstacle_count!=5:raise ValueError('Science quiz must have five questions')
-        if self.game_type!='SCIENCE_QUIZ' and self.obstacle_count<9:raise ValueError('Timed encounters must run for the whole round')
+        if self.game_type in BODY_MODES and self.obstacle_count!=4:raise ValueError('Body games require four spaced encounters')
         return self
 
 
@@ -160,8 +163,8 @@ def eligible_gemini_modes(planet, recent=(), global_recent=(), forced_mode=None)
     # obstacle races even when Gemini chooses the family each time.
     last=global_recent[-1] if global_recent else None
     requested=ACTION_MODES if last in SCIENCE_MODES else SCIENCE_MODES
-    pool=[m for m in available if m in requested]
-    pool=[m for m in pool if m not in recent[-2:] and m not in global_recent[-4:]] or [m for m in available if m in requested and m not in recent[-2:]] or pool
+    fresh=[m for m in available if m not in recent[-2:] and m not in global_recent[-4:]]
+    pool=[m for m in fresh if m in requested] or fresh or [m for m in available if m not in recent[-2:]]
     return pool or available
 
 # Allowed modes are different, implemented game loops (not just new titles).
@@ -202,7 +205,7 @@ def local_mission(planet,mode=None,style='STANDARD',recent_names=()):
     name=rng.choice(eligible)
     briefings={'SURFACE_RUN':'Race over the planet terrain: jump low hazards, duck under high ones.',
             'CRATER_LEAP':'Jump over craters and flick upward to clear steep ridges.',
-            'SAMPLE_HUNT':'Tilt toward glowing samples and press to collect them.',
+            'SAMPLE_HUNT':'Collect striped research samples. Leave unmarked rocks behind.',
             'STORM_SHELTER':'Duck beneath hazard fronts and shake to charge generators.',
             'BEACON_RELAY':'Steer toward beacons and press to activate them.',
             'RELAY_REPAIR':'Tilt to align with damaged orbital relays; shake to restore their signals.',
@@ -210,12 +213,12 @@ def local_mission(planet,mode=None,style='STANDARD',recent_names=()):
             'SCIENCE_QUIZ':'Tilt left / center / right to select a scientific answer; press to submit.',
             'RING_RACE':'Race over Saturn’s fictional icy track: jump low and duck high.',
             'ASTEROID_DODGE':'Steer to avoid rocks or shake to break them.',
-            'ORBIT_SLALOM':'Weave between moving obstacles to earn points.',
+            'ORBIT_SLALOM':'Steer through the center of each navigation gate.',
             'METEOR_BREAK':'Shake to clear incoming rocks before impact.'}
     return GameMission(planet=planet,game_type=mode,name=name,briefing=briefings[mode],
-                       movements=[Movement(control=c,instruction=('Tilt to select answer A, B, or C.' if mode=='SCIENCE_QUIZ' and c=='TILT' else 'Press your button to submit your answer.' if mode=='SCIENCE_QUIZ' and c=='PRESS' else INSTRUCTIONS[c])) for c in MOVES[mode]],
-                       obstacle_count=5 if mode=='SCIENCE_QUIZ' else rng.randint(9,10),time_limit_s=15,
-                       challenge_style=style,sync_boost=mode not in ('ORBIT_SLALOM','SCIENCE_QUIZ'))
+                       movements=[Movement(control=c,instruction=('Steer through the illuminated gate centers.' if mode=='ORBIT_SLALOM' else 'Tilt toward striped research samples; avoid plain decoys.' if mode=='SAMPLE_HUNT' and c=='TILT' else 'Press to collect a striped sample when it is near.' if mode=='SAMPLE_HUNT' and c=='PRESS' else 'Tilt to select answer A, B, or C.' if mode=='SCIENCE_QUIZ' and c=='TILT' else 'Press your button to submit your answer.' if mode=='SCIENCE_QUIZ' and c=='PRESS' else INSTRUCTIONS[c])) for c in MOVES[mode]],
+                       obstacle_count=4 if mode in BODY_MODES else 5 if mode in ('SCIENCE_QUIZ','SAMPLE_HUNT','BEACON_RELAY','RELAY_REPAIR','GRAVITY_SLING') else 7,time_limit_s=15,
+                       challenge_style=style,sync_boost=mode in ('RELAY_REPAIR','BEACON_RELAY'))
 
 async def generate_game(planet,recent=(),recent_names=(),global_recent=(),style_history=(),lesson=None,forced_mode=None):
     """Gemini creates the mission concept AND selects its implemented mechanics.
@@ -237,6 +240,8 @@ async def generate_game(planet,recent=(),recent_names=(),global_recent=(),style_
 
     if not os.getenv('GEMINI_API_KEY'):
         return fallback(),'LOCAL · NO API KEY'
+    if cooldown_remaining()>0:
+        return fallback(),'LOCAL · GEMINI RATE LIMITED (COOLDOWN)'
     try:
         from google import genai
         from google.genai import types
@@ -257,7 +262,7 @@ async def generate_game(planet,recent=(),recent_names=(),global_recent=(),style_
         Use the real fact as story inspiration where it fits. Do not pretend fictional missions are historical
         NASA operations. Rocky surface research is for Mercury, Venus, Earth, Mars only.
         Saturn, Jupiter, Uranus and Neptune have no solid ground on which this game could be played.
-        If you select SCIENCE_QUIZ, verified questions and correct answers are loaded from the server.
+        Never create quizzes or multiple-choice questions. Teach science through physical action and exploration.
         Give a fresh memorable name and a punchy, actionable briefing under 120 characters.
         Choose an encounter pattern: SCATTERED, ALTERNATING, or CENTER_OUT.
         Recent game types: {list(global_recent[-5:])}; recent titles: {list(recent_names[-8:])}.
@@ -294,6 +299,7 @@ async def generate_game(planet,recent=(),recent_names=(),global_recent=(),style_
         return mission,'GEMINI · LIVE CHALLENGE'
     except Exception as exc:
         # Never expose credentials, request payloads or provider error text.
+        record_failure(exc)
         code=getattr(exc,'code',None)
         if isinstance(exc, (ImportError, ModuleNotFoundError)):
             reason='SDK NOT INSTALLED'
@@ -311,20 +317,22 @@ async def generate_game(planet,recent=(),recent_names=(),global_recent=(),style_
 
 class FlightGame:
     def __init__(self,simulated=True):
-        self.simulated=simulated;self.task=None;self.generation=0;self.history={};self.global_history=[];self.style_history=[];self.fact_history={};self.names={};self.reset()
+        self.controller_signs=[[(-1. if os.getenv(f'P{i}_{axis}_SIGN','1')=='-1' else 1.) for axis in ('FORWARD','STEER','TILT')] for i in (1,2)];self.simulated=simulated;self.task=None;self.generation=0;self.history={};self.global_history=[];self.style_history=[];self.fact_history={};self.names={};self.reset()
     def reset(self):
         if self.task:self.task.cancel()
         self.generation+=1;self.phase='READY';self.age=0.;self.world_time=0.;self.planet=None;self.mission=None;self.source='';self.education=None
-        self.players=[dict(x=0.,y=0.,yaw=0.,pitch=.065,distance=0.,health=100,score=0,jump=0.,flick=0.,duck=False,samples=0,chargers=0,selection=1) for _ in range(2)]
+        self.players=[dict(x=0.,y=0.,yaw=0.,pitch=0.,distance=0.,health=100,score=0,jump=0.,flick=0.,duck=False,samples=0,chargers=0,selection=1) for _ in range(2)]
         # Separate sources: the browser sends neutral keyboard axes every 50 ms.
         # A live physical remote must never be overwritten by those idle packets.
         self.axes=[[0.,0.],[0.,0.]];self.input_at=[-10.,-10.]
-        self.remote_axes=[[0.,0.],[0.,0.]];self.remote_input_at=[-10.,-10.]
+        self.remote_axes=[[0.,0.],[0.,0.]];self.remote_input_at=[-10.,-10.];self.remote_tilt=[None,None]
+        self.remote_raw=[[0.,0.,None],[0.,0.,None]];self.remote_packets=[0,0];self.remote_events=[None,None]
         # Per-action debounce and matched-action sync are independent of transport.
         # Keyboard, webcam and two eventual ESP32 remotes all use these same events.
         self.last_actions=[{},{}];self.sync_timestamps={};self.last_sync=-10.
-        self.ship=[0.,0.,0.];self.roll=0.;self.speed=0.;self.thrust_blocked=False;self.travel=0.;self.team_score=0;self.health=100;self.boost=0.;self.boost_cooldown=0.;self.sync_effect=''
-        self.transfer_from=[0.,0.,0.];self.obstacles=[];self.winner='NONE';self.event='READY';self.event_id=0;self.damage_flash=0.
+        self.duck_sources=[set(),set()];self.jump_at=[-100.,-100.];self.flick_at=[-100.,-100.];self.total_scores=[0,0]
+        self.ship=[0.,14.,0.];self.roll=0.;self.speed=0.;self.thrust_blocked=False;self.travel=0.;self.team_score=0;self.health=100;self.boost=0.;self.boost_cooldown=0.;self.sync_effect=''
+        self.inspected=None;self.transfer_from=[0.,0.,0.];self.obstacles=[];self.winner='NONE';self.event='READY';self.event_id=0;self.damage_flash=0.
     def emit(self,text):self.event=text;self.event_id+=1
     def transition(self,phase):self.phase=phase;self.age=0.
     def targets(self):
@@ -333,10 +341,11 @@ class FlightGame:
             dx,dy,dz=x-self.ship[0],y-self.ship[1],z-self.ship[2]
             result.append(dict(planet=name,position=[x,y,z],yaw=math.atan2(dx,-dz),pitch=math.atan2(dy,math.hypot(dx,dz)),distance=round(math.sqrt(dx*dx+dy*dy+dz*dz),1)))
         return result
+    def selection(self):
+        return crosshair_target(self.ship,self.players[0],self.targets(),self.travel)
     def target(self,i=0):
-        p=self.players[0];angle=lambda t:abs(math.atan2(math.sin(t['yaw']-p['yaw']),math.cos(t['yaw']-p['yaw'])))
-        t=min(self.targets(),key=lambda t:angle(t)**2+(t['pitch']-p['pitch'])**2)
-        return t['planet'] if angle(t)<.045 and abs(t['pitch']-p['pitch'])<.045 and t['distance']<165 and self.travel>20 else None
+        t=self.selection()
+        return t['id'] if t and t['kind']=='planet' and t['selectable'] else None
     async def generate(self,planet,version,forced_mode=None):
         lesson=choose_planet_fact(planet,self.fact_history.get(planet,[]))
         m,source=await generate_game(planet,self.history.get(planet,[]),self.names.get(planet,[]),self.global_history,self.style_history,lesson,forced_mode=forced_mode)
@@ -360,10 +369,11 @@ class FlightGame:
                 # left/right stick or P2 roll/tilt. Mission movement is lateral;
                 # route that same real horizontal sensor reading to the mission
                 # lane axis, without changing flight/navigation behavior.
-                if self.phase in ('MISSION','RESULTS'):
-                    result.append([remote[1],0.])
+                if self.phase in ('COUNTDOWN','MISSION','RESULTS'):
+                    lateral=self.remote_tilt[i] if self.remote_tilt[i] is not None and 'TILT' in MOVES[self.mission.game_type] else remote[1]
+                    result.append([lateral,0.])
                 else:
-                    result.append(remote)
+                    result.append([0.,self.remote_tilt[i]] if i==1 and self.remote_tilt[i] is not None else remote)
             elif self.world_time-self.input_at[i]<.4:
                 result.append(self.axes[i])
             else:
@@ -378,20 +388,21 @@ class FlightGame:
         if line=='FLIGHT,EXPLORE':
             if self.phase=='RESULTS':
                 self.mission=None;self.speed=0.;self.axes=[[0.,0.],[0.,0.]];self.input_at=[-10.,-10.]
-                self.remote_axes=[[0.,0.],[0.,0.]];self.remote_input_at=[-10.,-10.]
+                self.remote_axes=[[0.,0.],[0.,0.]];self.remote_input_at=[-10.,-10.];self.remote_tilt=[None,None]
                 self.transition('NAVIGATION')
             return
         if line=='FLIGHT,LAUNCH':
             if self.phase=='READY':self.transition('LAUNCH');self.emit('LEAVING EARTH')
             return
         if line=='FLIGHT,SURFACE_GAME':
-            # A direct route to the educational first-person ground games.
-            # Users should not have to hope that random Gemini chooses one.
-            if self.phase in ('BRIEFING','RESULTS') and self.planet in ROCKY_PLANETS:
+            if self.phase in ('BRIEFING','RESULTS') and self.planet:
                 if self.task and not self.task.done():return
                 seen=self.history.get(self.planet,[])
-                # Offer fieldwork first, then different first-person and science activities.
-                choices=('SAMPLE_HUNT','CRATER_LEAP','STORM_SHELTER','SURFACE_RUN','SCIENCE_QUIZ')
+                # Giant planets get an orbital course, never an imaginary surface.
+                choices=(('SURFACE_RUN','CRATER_LEAP','STORM_SHELTER','SAMPLE_HUNT')
+                         if self.planet in ROCKY_PLANETS else
+                         ('RING_RACE',) if self.planet=='SATURN' else
+                         ('ORBIT_SLALOM','GRAVITY_SLING','RELAY_REPAIR'))
                 last=next((m for m in reversed(seen) if m in choices),None)
                 mode=choices[(choices.index(last)+1)%len(choices)] if last else choices[0]
                 self.mission=None;self.transition('GENERATING')
@@ -404,11 +415,21 @@ class FlightGame:
             return
         if len(parts)<3 or parts[1] not in ('P1','P2'):raise ValueError('Invalid player')
         i=int(parts[1][1])-1;p=self.players[i];action=parts[2]
+        if source=='remote' and action not in ('SENSORS','AXIS'):
+            self.remote_events[i]={'action':action,'at':self.world_time}
+        if action=='DISCONNECTED' and source=='remote':
+            self.remote_input_at[i]=-100.;self.remote_axes[i]=[0.,0.];self.remote_tilt[i]=None;self.duck_sources[i].discard('remote');p['duck']=bool(self.duck_sources[i]);return
+        if action=='SENSORS' and source=='remote' and len(parts)==6:
+            throttle,steer,tilt=map(float,parts[3:])
+            if not all(math.isfinite(v) and -1<=v<=1 for v in (throttle,steer,tilt)):raise ValueError('Invalid sensor state')
+            self.remote_raw[i]=[throttle,steer,tilt];self.remote_packets[i]+=1
+            signs=self.controller_signs[i];self.remote_axes[i]=[throttle*signs[0],steer*signs[1]];self.remote_tilt[i]=tilt*signs[2];self.remote_input_at[i]=self.world_time;return
         if action=='AXIS' and len(parts)==5:
             x,y=map(float,parts[3:])
             if not all(math.isfinite(v) and -1<=v<=1 for v in (x,y)):raise ValueError('Axes must be normalized')
             if source=='remote':
-                self.remote_axes[i]=[x,y];self.remote_input_at[i]=self.world_time
+                self.remote_raw[i]=[x,y,None];self.remote_packets[i]+=1
+                self.remote_axes[i]=[x*self.controller_signs[i][0],y*self.controller_signs[i][1]];self.remote_tilt[i]=None;self.remote_input_at[i]=self.world_time
             else:
                 self.axes[i]=[x,y];self.input_at[i]=self.world_time
             return
@@ -419,19 +440,27 @@ class FlightGame:
             if i!=0:return
             if self.phase=='READY':self.command('FLIGHT,LAUNCH')
             elif self.phase=='NAVIGATION':
+                selected=self.selection()
+                if selected and selected['kind']=='discovery':
+                    self.inspected=selected['id'];self.emit('INSPECT '+selected['name']);return
                 planet=self.target()
                 if planet:
                     self.planet=planet;self.transfer_from=list(self.ship);self.transition('TRAVEL');self.emit(f'{planet} LOCKED')
                     self.task=asyncio.create_task(self.generate(planet,self.generation))
                 else:self.emit('P1 · STEER TOWARD A PLANET AND MOVE FORWARD')
-            elif self.phase=='BRIEFING' and self.mission:self.start_mission()
+            elif self.phase=='BRIEFING' and self.mission:self.transition('COUNTDOWN');self.emit('GET READY')
             elif self.phase=='RESULTS':self.reset()
             return
         if action not in ('JUMP','DUCK_ON','DUCK_OFF','SHAKE','PRESS','UPWARD_FLICK'):raise ValueError('Unsupported action')
         if action=='DUCK_OFF':
-            p['duck']=False
+            self.duck_sources[i].discard(source)
+            p['duck']=bool(self.duck_sources[i])
             return
-        if self.phase!='MISSION':return
+        if action=='DUCK_ON':
+            self.duck_sources[i].add(source)
+            p['duck']=bool(self.duck_sources[i])
+            return
+        if self.phase!='MISSION' or self.age>=self.mission.time_limit_s:return
         moves=MOVES[self.mission.game_type]
         # Ignore auto-repeat / IMU jitter. DUCK_ON is an edge, not an every-frame event.
         if action=='DUCK_ON' and p['duck']:return
@@ -440,9 +469,9 @@ class FlightGame:
         now=self.world_time
         if now-self.last_actions[i].get(action,-100)<.23:return
         self.last_actions[i][action]=now
-        if action=='JUMP':p['jump']=.85
+        if action=='JUMP':p['jump']=RESPONSE_WINDOW;self.jump_at[i]=self.age
         elif action=='UPWARD_FLICK':
-            p['flick']=.95
+            p['flick']=RESPONSE_WINDOW;self.flick_at[i]=self.age
             self.emit(f'P{i+1} · BOOST LEAP!')
         elif action=='DUCK_ON':p['duck']=True
         elif action=='PRESS' and self.mission.game_type=='SCIENCE_QUIZ':
@@ -457,14 +486,18 @@ class FlightGame:
             return
         elif action in ('SHAKE','PRESS') and action in moves:
             nearby=[o for o in self.obstacles if not o['destroyed_by'][i] and not o['passed'][i]
-                    and 0<=o['event_at']-self.age<=1.0 and abs(o['x']-p['x'])<2.2
+                    and -INPUT_GRACE<=o['event_at']-self.age<=1.0 and abs(o['x']-p['x'])<2.2
                     and (o['kind'] in ('SAMPLE','GENERATOR') if self.mission.game_type in ('SAMPLE_HUNT','STORM_SHELTER','RELAY_REPAIR') else True)]
             if nearby:
                 picked=min(nearby,key=lambda o:o['z']);picked['destroyed_by'][i]=True
-                if picked['kind']=='SAMPLE':p['samples']+=1;self.emit(f'P{i+1} SAMPLE {p["samples"]}/3')
+                if picked['kind']=='SAMPLE' and not picked.get('research',True):
+                    p['score']=max(0,p['score']-5);p['feedback']='DECOY −5';p['feedback_until']=self.age+1.2;self.emit(f'P{i+1} · UNMARKED ROCK −5');return
+                if picked['kind']=='SAMPLE':p['samples']+=1;self.emit(f'P{i+1} SAMPLE {p["samples"]}/{3}')
                 elif picked['kind']=='GENERATOR':p['chargers']+=1;self.emit(f'P{i+1} POWER {p["chargers"]}/2')
                 else:self.emit(f'P{i+1} · +25')
                 p['score']+=self._points(25,picked['event_at'])
+                p['feedback']='COLLECTED +25' if picked['kind']=='SAMPLE' else 'REPAIRED +25' if self.mission.game_type=='RELAY_REPAIR' else 'ACTIVATED +25'
+                p['feedback_until']=self.age+1.2
         # Optional sync uses only a natural primary movement for this mission;
         # it is never a random extra shake or a replacement for the objective.
         sync_action={
@@ -494,7 +527,8 @@ class FlightGame:
 
     def start_mission(self):
         self.transition('MISSION');self.last_actions=[{},{}];self.sync_timestamps={};self.last_sync=-10.;self.health=100;self.boost=0;self.boost_cooldown=0;self.team_score=0;self.sync_effect=''
-        for p in self.players:p.update(x=0.,y=0.,distance=0.,health=100,score=0,jump=0.,flick=0.,duck=False,samples=0,chargers=0,selection=1)
+        self.jump_at=[-100.,-100.];self.flick_at=[-100.,-100.]
+        for i,p in enumerate(self.players):p.update(x=0.,y=0.,distance=0.,health=100,score=0,jump=0.,flick=0.,duck=bool(self.duck_sources[i]),samples=0,chargers=0,selection=1,feedback='',feedback_until=0.)
         rng=random.Random(self.mission.name+str(self.generation));self.obstacles=[]
         if self.mission.game_type=='SCIENCE_QUIZ':
             # Five true science prompts: the final prompt appears near second 13
@@ -509,23 +543,19 @@ class FlightGame:
                                            destroyed=False,destroyed_by=[False,False],passed=[False,False]))
             self.emit('SCIENCE LAB · CHOOSE THE CORRECT ANSWER!')
             return
-        for n in range(self.mission.obstacle_count):
+        for n,encounter_at in enumerate(encounter_times(self.mission.game_type,self.mission.obstacle_count)):
             mode=self.mission.game_type
             kind=({'SURFACE_RUN':('HURDLE','GATE'),'RING_RACE':('HURDLE','GATE'),
                    'CRATER_LEAP':('PIT','RIDGE'),'SAMPLE_HUNT':('SAMPLE',),
-                   'STORM_SHELTER':('GENERATOR','STORM'),'RELAY_REPAIR':('GENERATOR',),'GRAVITY_SLING':('PORTAL',)}.get(mode,('BEACON',) if mode=='BEACON_RELAY' else ('ROCK',)))[n % (2 if mode in ('SURFACE_RUN','RING_RACE','STORM_SHELTER','CRATER_LEAP') else 1)]
+                   'STORM_SHELTER':('GENERATOR','STORM'),'RELAY_REPAIR':('GENERATOR',),'GRAVITY_SLING':('PORTAL',),'ORBIT_SLALOM':('SLALOM',)}.get(mode,('BEACON',) if mode=='BEACON_RELAY' else ('ROCK',)))[n % (2 if mode in ('SURFACE_RUN','RING_RACE','STORM_SHELTER','CRATER_LEAP') else 1)]
             mobile=mode in ('SAMPLE_HUNT','BEACON_RELAY','ORBIT_SLALOM','ASTEROID_DODGE','RELAY_REPAIR','GRAVITY_SLING')
             if mobile:
                 x=(rng.choice([-2.7,0.,2.7]) if self.mission.event_pattern=='SCATTERED' else
                    (-2.7 if n%2==0 else 2.7) if self.mission.event_pattern=='ALTERNATING' else
                    (0.,-2.7,2.7)[n%3])
             else:x=0.
-            # Events fill the whole 15-second game: first encounter at ~1s,
-            # final encounter at ~14.3s, not only the opening 5 seconds.
-            progress=n/max(1,self.mission.obstacle_count-1)
-            # Every game has a final encounter near 14.3 seconds.
-            encounter_at=1.0+13.3*progress
-            self.obstacles.append(dict(id=n,x=x,y=0.,z=12.*encounter_at+6.,event_at=encounter_at,
+            self.obstacles.append(dict(id=n,x=x,y=0.,z=TRACK_SPEED*encounter_at,event_at=encounter_at,
+                                       cue_at=max(0.,encounter_at-WARNING_LEAD), avoided=[False,False], research=(n%2==0 if mode=='SAMPLE_HUNT' else True),
                                        kind=kind,destroyed=False,destroyed_by=[False,False],passed=[False,False]))
         self.emit('LET’S GO!')
     def tick(self,dt):
@@ -539,8 +569,9 @@ class FlightGame:
         self.boost=max(0.,self.boost-dt);self.boost_cooldown=max(0.,self.boost_cooldown-dt)
         axes=self.active_axes()
         if self.phase=='LAUNCH':
-            self.ship[1]=self.age*2;self.ship[2]=-self.age*3
+            self.ship[1]=14.;self.ship[2]=-self.age*3
             if self.age>=5:self.transition('NAVIGATION');self.emit('P1 · FORWARD / BACK / TURN · P2 · LEVEL THE SHIP')
+        if self.phase=='COUNTDOWN' and self.age>=COUNTDOWN_SECONDS:self.start_mission()
         if self.phase=='NAVIGATION':
             self.thrust_blocked=False
             pilot=self.players[0]
@@ -575,7 +606,7 @@ class FlightGame:
             self.roll=max(-.32,min(.32,self.roll+dt*(.065*math.sin(self.world_time*1.1)+.02-axes[1][1]*.5)))
         if self.phase=='TRAVEL':
             dest=next(t for t in DESTINATIONS if t[0]==self.planet);t=min(1,self.age/4);smooth=t*t*(3-2*t)
-            end=[dest[1],dest[2]-3,dest[3]+55]
+            end=[dest[1],dest[2],dest[3]+55]
             self.ship=[a+(b-a)*smooth for a,b in zip(self.transfer_from,end)]
             yaw=self.players[0]['yaw'];self.players[0]['yaw']=yaw*(1-min(1,dt*2));self.players[1]['yaw']=self.players[0]['yaw']
             if self.age>=4 and self.mission:self.transition('BRIEFING');self.emit('MISSION READY')
@@ -587,14 +618,28 @@ class FlightGame:
                 p['selection']=0 if axes[i][0]<-.45 else 2 if axes[i][0]>.45 else 1
             elif 'STEER' in MOVES[mode] or 'TILT' in MOVES[mode]:p['x']=max(-4.,min(4.,p['x']+axes[i][0]*dt*5))
             p['jump']=max(0.,p['jump']-dt);p['flick']=max(0.,p['flick']-dt)
-            if mode!='SCIENCE_QUIZ':p['distance']+=dt*12
+            if mode!='SCIENCE_QUIZ':p['distance']=min(self.age,self.mission.time_limit_s)*TRACK_SPEED
             for o in self.obstacles:
                 if mode=='SCIENCE_QUIZ':
                     if o['event_at']+2.3<=self.age:o['passed'][i]=True
                     continue
-                if o['passed'][i] or o['destroyed_by'][i] or self.age<o['event_at']:continue
+                if o['passed'][i] or o['destroyed_by'][i]:continue
+                if o['kind'] in BODY_KINDS:
+                    # Capture success at contact; permit a late camera edge within
+                    # the grace interval. Resolve once, identically for both lanes.
+                    if self.age>=o['event_at']:
+                        jump_ok=o['event_at']-RESPONSE_WINDOW <= self.jump_at[i] <= o['event_at']+INPUT_GRACE
+                        flick_ok=o['event_at']-RESPONSE_WINDOW <= self.flick_at[i] <= o['event_at']+INPUT_GRACE
+                        ok=jump_ok if o['kind'] in ('HURDLE','PIT') else flick_ok if o['kind']=='RIDGE' else p['duck']
+                        o['avoided'][i]=o['avoided'][i] or ok
+                if self.age<o['event_at']+INPUT_GRACE:continue
                 o['passed'][i]=True
                 if o['kind'] in ('BEACON','SAMPLE'):continue
+                if o['kind']=='SLALOM':
+                    aligned=abs(o['x']-p['x'])<1.65
+                    p['score']+=15 if aligned else 0
+                    p['feedback']='GATE +15' if aligned else 'MISSED GATE';p['feedback_until']=self.age+1.2
+                    continue
                 if o['kind']=='PORTAL':
                     if p['flick']>0 and abs(o['x']-p['x'])<1.8:
                         points=self._points(15,o['event_at']);p['score']+=points
@@ -606,7 +651,9 @@ class FlightGame:
                     if not o['destroyed_by'][i] and self.boost<=0:
                         p['health']=max(0,p['health']-5);self.damage_flash=.2;self.emit(f'P{i+1} · CHARGE THE GENERATOR!')
                     continue
-                hit=(p['jump']<=0 if o['kind'] in ('HURDLE','PIT') else p['flick']<=0 if o['kind']=='RIDGE' else not p['duck'] if o['kind'] in ('GATE','STORM') else abs(o['x']-p['x'])<1.5)
+                hit=not o['avoided'][i] if o['kind'] in BODY_KINDS else abs(o['x']-p['x'])<1.5
+                p['feedback']='MISSED' if hit and self.boost<=0 else 'CLEARED +10'
+                p['feedback_until']=self.age+1.2
                 if hit and self.boost<=0:
                     p['health']=max(0,p['health']-8);self.damage_flash=.35;self.emit(f'P{i+1} · '+('FLICK UP!' if o['kind']=='RIDGE' else 'JUMP THE GAP!' if o['kind']=='PIT' else 'JUMP!' if o['kind']=='HURDLE' else 'TAKE COVER!' if o['kind']=='STORM' else 'DUCK!' if o['kind']=='GATE' else 'WATCH THE ROCKS!'))
                 else:
@@ -620,12 +667,22 @@ class FlightGame:
                     for i in range(2):o['passed'][i]=True  # End the final answer window on time.
             scores=[p['score'] for p in self.players]
             self.winner='P1' if scores[0]>scores[1] else 'P2' if scores[1]>scores[0] else 'TIE'
+            self.total_scores=[total+p['score'] for total,p in zip(self.total_scores,self.players)]
             self.transition('RESULTS')
             self.emit('PLAYER 1 WINS!' if self.winner=='P1' else 'PLAYER 2 WINS!' if self.winner=='P2' else 'IT’S A TIE!')
+    def controller_snapshot(self):
+        active=self.active_axes()
+        rows=[]
+        for i in range(2):
+            age=max(0.,self.world_time-self.remote_input_at[i]);fresh=age<.4
+            event=self.remote_events[i]
+            rows.append(dict(player=f'P{i+1}',raw=self.remote_raw[i],axes=self.remote_axes[i],tilt=self.remote_tilt[i],effective=active[i],fresh=fresh,age_ms=round(age*1000) if self.remote_packets[i] else None,packets=self.remote_packets[i],source='REMOTE' if fresh else 'KEYBOARD' if self.world_time-self.input_at[i]<.4 else 'NONE',last_action=event['action'] if event else None,action_age_ms=round((self.world_time-event['at'])*1000) if event else None,signs=self.controller_signs[i]))
+        return rows
+
     def snapshot(self):
         education=dict(self.education or PLANET_FACTS.get(self.planet) or {})
         if self.mission:
             education['why']=MODE_LESSONS[self.mission.game_type]
         thrust=self.active_axes()[0][0] if self.phase=='NAVIGATION' else 0.
         quiz=next(({'id':o['id'],'question':o['question'],'choices':o['choices'],'explanation':o['explanation'],'answered':list(o['passed'])} for o in self.obstacles if o['kind']=='QUESTION' and o['event_at']<=self.age<o['event_at']+2.3),None) if self.mission and self.mission.game_type=='SCIENCE_QUIZ' else None
-        return dict(quiz=quiz,thrust_input=max(0.,thrust),reverse_input=max(0.,-thrust),throttle_input=thrust,thrust_blocked=self.thrust_blocked,ship=self.ship,team_score=self.team_score,health=self.health,boost=self.boost,boost_cooldown=self.boost_cooldown,damage_flash=self.damage_flash,roll=round(self.roll,4),speed=round(self.speed,1),travel=round(self.travel,2),phase=self.phase,age=round(self.age,2),planet=self.planet,players=self.players,targets=self.targets(),locked=[self.target(),self.target()],mission=self.mission.model_dump() if self.mission else None,source=self.source,obstacles=[{k:v for k,v in o.items() if k!='answer'} for o in self.obstacles],winner=self.winner,event=self.event,event_id=self.event_id,sync_ready=self.boost_cooldown<=0,sync_window_s=.8,education=education or None,sync_effect=self.sync_effect,authority='SIMULATOR / KEYBOARD' if self.simulated else 'PICO / COMPUTER')
+        return dict(controllers=self.controller_snapshot(),selection=self.selection() if self.phase=='NAVIGATION' else None,inspected=self.inspected,timing=timing_snapshot(),total_scores=self.total_scores,quiz=quiz,thrust_input=max(0.,thrust),reverse_input=max(0.,-thrust),throttle_input=thrust,thrust_blocked=self.thrust_blocked,ship=self.ship,team_score=self.team_score,health=self.health,boost=self.boost,boost_cooldown=self.boost_cooldown,damage_flash=self.damage_flash,roll=round(self.roll,4),speed=round(self.speed,1),travel=round(self.travel,2),phase=self.phase,age=round(self.age,2),planet=self.planet,players=self.players,targets=self.targets(),locked=[self.target(),self.target()],mission=self.mission.model_dump() if self.mission else None,source=self.source,obstacles=[{k:v for k,v in o.items() if k!='answer'} for o in self.obstacles],winner=self.winner,event=self.event,event_id=self.event_id,sync_ready=self.boost_cooldown<=0,sync_window_s=.8,education=education or None,sync_effect=self.sync_effect,authority='SIMULATOR / KEYBOARD' if self.simulated else 'PICO / COMPUTER')

@@ -12,7 +12,7 @@ separate producers of the same validated FlightGame actions.
 import math
 
 PLAYERS={'P1','P2'}
-EVENTS={'SELECT','PRESS','SHAKE','UPWARD_FLICK','JUMP','DUCK_ON','DUCK_OFF'}
+EVENTS={'SELECT','PRESS','SHAKE','UPWARD_FLICK','JUMP','DUCK_ON','DUCK_OFF','DISCONNECTED'}
 
 
 def remote_to_flight(line):
@@ -23,6 +23,10 @@ def remote_to_flight(line):
     fields=line.strip().split(',')
     if len(fields)<3 or fields[0]!='REMOTE' or fields[1] not in PLAYERS:
         raise ValueError('Invalid remote event')
+    if fields[2]=='STATE' and len(fields)==6:
+        values=[float(v) for v in fields[3:]]
+        if not all(math.isfinite(v) and -1<=v<=1 for v in values):raise ValueError('Invalid sensor state')
+        return f'FLIGHT,{fields[1]},SENSORS,'+','.join(map(str,values))
     if fields[2]=='AXIS' and len(fields)==5:
         try:
             x,y=(float(s) for s in fields[3:])
