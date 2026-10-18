@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {pointerPosition,primarySelector,pendingPresses} from './controllerUi.js';
+import {pointerPosition,primarySelector,pendingPresses,fallbackAction} from './controllerUi.js';
 test('each controller reaches full viewport and malformed input stays bounded',()=>{
  assert.deepEqual(pointerPosition([0,0]),{x:50,y:50});
  assert.deepEqual(pointerPosition([1,-1]),{x:1,y:1});
@@ -20,4 +20,11 @@ test('snapshot counters catch presses from both players without replay on reconn
  assert.deepEqual(pendingPresses([5,10],[6,11]),[0,1]);
  assert.deepEqual(pendingPresses([6,11],[6,11]),[]);
  assert.deepEqual(pendingPresses([6,11],[0,0]),[]);
+});
+test('gameplay fallback preserves P2 identity and never acts through an information panel',()=>{
+ assert.equal(fallbackAction({phase:'MISSION'},0),'FLIGHT,P1,SELECT');
+ assert.equal(fallbackAction({phase:'MISSION'},1),'FLIGHT,P2,SELECT');
+ assert.equal(fallbackAction({phase:'MISSION',help:true},1),null);
+ assert.equal(fallbackAction({phase:'NAVIGATION',discovery:{}},0),null);
+ assert.equal(fallbackAction({phase:'GENERATING'},0),null);
 });

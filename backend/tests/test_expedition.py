@@ -50,3 +50,14 @@ def test_visual_gravity_bonus_is_capped_and_leaves_timing_alone():
 def test_leave_during_arrival_does_not_award_a_round():
     g=FlightGame();g.planet='MARS';g.transition('ARRIVAL');g.command('FLIGHT,EXPLORE')
     assert g.phase=='NAVIGATION' and not g.planet_results
+
+
+def test_launch_eases_into_lift_and_settles_without_spinning():
+    g=FlightGame();g.transition('LAUNCH');heights=[g.ship[1]]
+    for _ in range(100):
+        g.tick(.05);heights.append(g.ship[1])
+    steps=[b-a for a,b in zip(heights,heights[1:])]
+    assert all(step>=0 for step in steps)
+    assert steps[0]<steps[40]*.01 and steps[-1]<steps[40]*.01
+    assert abs(g.ship[1]-24)<1e-6 and abs(g.ship[2]+135)<1e-6
+    assert g.roll==0 and g.players[0]['yaw']==0

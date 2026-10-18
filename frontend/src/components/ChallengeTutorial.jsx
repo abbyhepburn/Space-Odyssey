@@ -8,7 +8,7 @@ export default function ChallengeTutorial({game:g,status,send}){
   <div className="tutorial-moves">{g.mission.movements.map(m=><article key={m.control}><MovementDemo action={m.control}/><div><h2>{labels[m.control]}</h2><p>{m.instruction}</p><small>Both players · Your own remote</small></div></article>)}</div>
   <aside className="tutorial-fact"><b>DISCOVER {g.planet}</b><p>{g.education?.fact}</p></aside>
   <p className="tutorial-tip">Jump or duck in front of the laptop camera. You can also tilt the remote up to jump or push the joystick forward to duck. Watch your lane and collect points.</p>
-  <footer><div><button onClick={()=>send('FLIGHT,REGENERATE')}>Different game ↻</button><button onClick={()=>send('FLIGHT,SURFACE_GAME')}>{['MERCURY','VENUS','EARTH','MARS'].includes(g.planet)?'Play ground game':g.planet==='SATURN'?'Play ring course':'Play orbital game'}</button></div><button className="tutorial-start" onClick={()=>send('FLIGHT,P1,SELECT')}>START CHALLENGE <small>P1 · PRESS JOYSTICK</small></button></footer>
+  <footer><div><button onClick={()=>send('FLIGHT,REGENERATE')}>Different game ↻</button><button onClick={()=>send('FLIGHT,SURFACE_GAME')}>{['MERCURY','VENUS','EARTH','MARS'].includes(g.planet)?'Play ground game':g.planet==='SATURN'?'Play ring course':'Play orbital game'}</button><button onClick={()=>send('FLIGHT,EXPLORE')}>Leave planet ↗</button></div><button className="tutorial-start" onClick={()=>send('FLIGHT,P1,SELECT')}>START CHALLENGE <small>P1 · PRESS JOYSTICK</small></button></footer>
   <small className="tutorial-source">{g.source}</small>
  </section>;
 }

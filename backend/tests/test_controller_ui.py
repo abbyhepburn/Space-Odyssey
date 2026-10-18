@@ -44,9 +44,22 @@ def test_mission_controller_button_still_scores_and_modal_button_does_not():
     g.age=sample['event_at']-.1
     for p in g.players:p['x']=sample['x']
     e.control('REMOTE,P1,SELECT')
+    assert g.players[0]['samples']==0 and e.ui_presses==[1,0]
+    # Browser found no UI button under P1's cursor; forward exactly one P1 action.
+    e.control('FLIGHT,P1,SELECT')
     assert g.players[0]['samples']==1 and g.players[1]['samples']==0
     e.control('UI,CONTEXT,MODAL');e.control('REMOTE,P2,SELECT')
-    assert g.players[1]['samples']==0 and e.ui_presses==[0,1]
+    assert g.players[1]['samples']==0 and e.ui_presses==[1,1]
+
+
+def test_mission_button_captures_click_position_for_either_player():
+    e=Engine();e.flight.planet='MARS';e.flight.mission=local_mission('MARS','SAMPLE_HUNT');e.flight.start_mission()
+    e.control('UI,CONTEXT,GAME')
+    e.control('REMOTE,P2,STATE,0.8,-0.75,0')
+    e.control('REMOTE,P2,SELECT')
+    e.control('REMOTE,P2,STATE,0,0,0')
+    assert e.snapshot()['flight']['ui_pointer_positions'][1]==[.8,-.75,0]
+    assert e.ui_presses==[0,1] and e.flight.players[1]['samples']==0
 
 
 def test_ui_lease_expires_to_legacy_remote_control():

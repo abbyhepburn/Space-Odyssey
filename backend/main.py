@@ -38,10 +38,10 @@ class Engine:
         self.status={'usb':self.simulated,'mode':'SIMULATOR' if self.simulated else 'PICO USB','vision':'Remote controls ready','gemini':'Local mission catalog','message':''}
         self.active=None; self.pending=None; self.mission_index=0; self.generating=False; self.epoch=0; self.last_state=0
         self.retry_at=0; self.mission_task=None
-        self.ui_context_until=0.; self.ui_modal=False; self.ui_presses=[0,0]
+        self.ui_context_until=0.; self.ui_modal=False; self.ui_presses=[0,0]; self.ui_pointer_positions=[None,None]
 
     def snapshot(self):
-        return {'type':'snapshot','state':self.state,'mission':self.active,'pending':bool(self.pending) or self.generating,'status':self.status,'capabilities':self.capabilities,'exploration':self.exploration.snapshot(),'flight':{**self.flight.snapshot(),'ui_presses':list(self.ui_presses)}}
+        return {'type':'snapshot','state':self.state,'mission':self.active,'pending':bool(self.pending) or self.generating,'status':self.status,'capabilities':self.capabilities,'exploration':self.exploration.snapshot(),'flight':{**self.flight.snapshot(),'ui_presses':list(self.ui_presses),'ui_pointer_positions':self.ui_pointer_positions}}
 
     def submit(self, kind, data):
         if os.getenv('SPACE_ODYSSEY_HOST_URL') and kind in ('line','input'):
@@ -60,8 +60,9 @@ class Engine:
         command=remote_to_flight(line)
         parts=command.split(',');i=int(parts[1][1])-1
         ui_live=time.monotonic()<self.ui_context_until
-        if parts[2]=='SELECT' and ui_live and (self.flight.phase!='MISSION' or self.ui_modal):
+        if parts[2] in ('SELECT','PRESS') and ui_live:
             self.ui_presses[i]+=1
+            self.ui_pointer_positions[i]=list(self.flight.remote_raw[i])
             self.flight.remote_events[i]={'action':'SELECT','at':self.flight.world_time}
             return
         self.flight.command(command,source='remote')

@@ -34,8 +34,8 @@ static uint8_t sensorAddress = SENSOR_ADDRESS;
 
 // Sampling and gesture tuning. Look at Serial Monitor before adjusting.
 static const uint32_t SAMPLE_MS = 20;                 // 50 Hz
-static const float SHAKE_ACCEL_THRESHOLD = 2.2f;     // m/s^2 change in norm
-static const float SHAKE_RELEASE_THRESHOLD = 0.9f;
+static const float SHAKE_ACCEL_THRESHOLD = 1.4f;     // m/s^2 change in norm
+static const float SHAKE_RELEASE_THRESHOLD = 0.55f;
 static const uint32_t SHAKE_WINDOW_MS = 900;
 static const uint32_t PEAK_GAP_MS = 70;
 static const uint32_t SHAKE_COOLDOWN_MS = 450;
@@ -45,8 +45,8 @@ static const uint32_t FLICK_COOLDOWN_MS = 850;
 static const uint32_t AFTER_FLICK_SHAKE_BLOCK_MS = 300;
 static const float TILT_ENTER_DEGREES = 12.0f;
 static const float TILT_EXIT_DEGREES = 7.0f;
-static const float TILT_UP_ENTER_DEGREES = 20.0f;
-static const float TILT_UP_EXIT_DEGREES = 10.0f;
+static const float TILT_UP_ENTER_DEGREES = 14.0f;
+static const float TILT_UP_EXIT_DEGREES = 7.0f;
 static const int JOY_ENTER = 450;
 static const int JOY_EXIT = 300;
 static const uint32_t JOY_STABLE_MS = 60;  // require consistent direction before announcing

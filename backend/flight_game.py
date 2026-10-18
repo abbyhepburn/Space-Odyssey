@@ -331,7 +331,7 @@ class FlightGame:
         # Keyboard, webcam and two eventual ESP32 remotes all use these same events.
         self.last_actions=[{},{}];self.sync_timestamps={};self.last_sync=-10.
         self.duck_sources=[set(),set()];self.jump_at=[-100.,-100.];self.flick_at=[-100.,-100.];self.total_scores=[0,0]
-        self.ship=[-15.,14.,-120.];self.roll=0.;self.speed=0.;self.thrust_blocked=False;self.travel=0.;self.team_score=0;self.health=100;self.boost=0.;self.boost_cooldown=0.;self.sync_effect=''
+        self.ship=[-15.,14.,-120.];self.roll=0.;self.roll_input=0.;self.speed=0.;self.thrust_blocked=False;self.travel=0.;self.team_score=0;self.health=100;self.boost=0.;self.boost_cooldown=0.;self.sync_effect=''
         self.inspected=None;self.inspection_id=0;self.transfer_from=[0.,0.,0.];self.obstacles=[];self.winner='NONE';self.event='READY';self.event_id=0;self.damage_flash=0.
     def emit(self,text):self.event=text;self.event_id+=1
     def transition(self,phase):self.phase=phase;self.age=0.
@@ -591,7 +591,9 @@ class FlightGame:
         axes=self.active_axes()
         if self.phase=='BOOT' and self.age>=10:self.transition('LAUNCH')
         if self.phase=='LAUNCH':
-            t=min(1.,self.age/5);ease=t*t*(3-2*t)
+            # Quintic easing gives zero velocity and acceleration at each end:
+            # a gradual engine build-up and a soft elevator-like handover.
+            t=min(1.,self.age/5);ease=t*t*t*(10+t*(-15+6*t))
             self.ship[1]=14.+10.*ease;self.ship[2]=-120.-15.*ease
             if self.age>=5:self.transition('NAVIGATION');self.emit('P1 · FORWARD / BACK / TURN · P2 · LEVEL THE SHIP')
         if self.phase=='COUNTDOWN' and self.age>=COUNTDOWN_SECONDS:self.start_mission()
@@ -626,7 +628,14 @@ class FlightGame:
                 self.travel+=abs(step)
             self.players[1]['yaw']=pilot['yaw']
         if self.phase in ('LAUNCH','NAVIGATION','TRAVEL'):
-            self.roll=max(-.32,min(.32,self.roll+dt*(.065*math.sin(self.world_time*1.1)+.02-axes[1][1]*.5)))
+            # Hold attitude with centered controllers. Roll is player-directed;
+            # there is no periodic wobble or artificial rotation to correct.
+            target=axes[1][1]
+            # Ease into changes in P2's tilt (including older digital firmware).
+            # Neutral stops immediately, so smoothing never adds idle drift.
+            if abs(target)<.04:self.roll_input=0.
+            else:self.roll_input+=(target-self.roll_input)*(1-math.exp(-dt/0.12))
+            self.roll=max(-.32,min(.32,self.roll-dt*self.roll_input*.5))
         if self.phase=='TRAVEL':
             dest=next(t for t in DESTINATIONS if t[0]==self.planet);t=min(1,self.age/4);smooth=t*t*(3-2*t)
             end=[dest[1],dest[2],dest[3]+55]

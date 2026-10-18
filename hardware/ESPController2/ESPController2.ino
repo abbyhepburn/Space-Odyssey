@@ -34,8 +34,8 @@ static uint8_t sensorAddress = SENSOR_ADDRESS;
 
 // Sampling and gesture tuning. Look at Serial Monitor before adjusting.
 static const uint32_t SAMPLE_MS = 20;                 // 50 Hz
-static const float SHAKE_ACCEL_THRESHOLD = 2.2f;     // m/s^2 change in norm
-static const float SHAKE_RELEASE_THRESHOLD = 0.9f;
+static const float SHAKE_ACCEL_THRESHOLD = 1.4f;     // m/s^2 change in norm
+static const float SHAKE_RELEASE_THRESHOLD = 0.55f;
 static const uint32_t SHAKE_WINDOW_MS = 900;
 static const uint32_t PEAK_GAP_MS = 70;
 static const uint32_t SHAKE_COOLDOWN_MS = 450;
@@ -45,8 +45,8 @@ static const uint32_t FLICK_COOLDOWN_MS = 850;
 static const uint32_t AFTER_FLICK_SHAKE_BLOCK_MS = 300;
 static const float TILT_ENTER_DEGREES = 12.0f;
 static const float TILT_EXIT_DEGREES = 7.0f;
-static const float TILT_UP_ENTER_DEGREES = 20.0f;
-static const float TILT_UP_EXIT_DEGREES = 10.0f;
+static const float TILT_UP_ENTER_DEGREES = 14.0f;
+static const float TILT_UP_EXIT_DEGREES = 7.0f;
 static const int JOY_ENTER = 450;
 static const int JOY_EXIT = 300;
 static const uint32_t JOY_STABLE_MS = 60;  // require consistent direction before announcing
@@ -341,8 +341,12 @@ static void sampleMotion() {
     if (newTilt != pendingTilt) { pendingTilt=newTilt; pendingTiltAt=now; }
     if (pendingTilt != tiltState && (uint32_t)(now-pendingTiltAt) >= TILT_STABLE_MS) {
       tiltState=pendingTilt;
-      tiltValue=tiltState=='L'?-100:tiltState=='R'?100:0;
     }
+    // Proportional tilt avoids abrupt full-speed corrections. Keep the
+    // neutral dead zone and existing gesture hysteresis for a steady rest.
+    const float strength=constrain((fabsf(roll)-TILT_EXIT_DEGREES)/(35.0f-TILT_EXIT_DEGREES),0.0f,1.0f);
+    const float targetTilt=(roll<0?-1.0f:1.0f)*strength*100.0f;
+    tiltValue=strength==0?0:(int8_t)lroundf(tiltValue+(targetTilt-tiltValue)*0.2f);
   }
 
   if (DEBUG_RAW_INTERVAL_MS &&

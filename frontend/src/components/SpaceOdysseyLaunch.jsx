@@ -146,7 +146,7 @@ export default function SpaceOdysseyLaunch({
             <button type="button" className="so-launch__primary" onClick={start} disabled={disabled}>{disabled?'CONNECTING TO SHIP':'INITIATE LAUNCH'} <Icon name="arrow" /></button>
             <div className="so-launch__secondary-row">
               <button type="button" onClick={onOpenControls} disabled={!onOpenControls}>FLIGHT MANUAL</button>
-              <button type="button" onClick={onOpenDiscoveries} disabled={!onOpenDiscoveries}>PLANET LOG</button>
+              <button type="button" onClick={onOpenDiscoveries} disabled={!onOpenDiscoveries}>INFORMATION</button>
             </div>
           </div>
           <div className="so-launch__keyboard">TWO PILOTS · READY FOR LAUNCH</div>
