@@ -41,3 +41,18 @@ def test_hosted_rejects_other_websites(monkeypatch):
         from starlette.websockets import WebSocketDisconnect
         with pytest.raises(WebSocketDisconnect):
             with client.websocket_connect('/ws/game',headers={'origin':'https://unrelated.example'}):pass
+
+def test_browser_camera_is_scoped_to_own_game_and_keyboard_does_not_release_it(monkeypatch):
+    monkeypatch.setenv('SPACE_ODYSSEY_HOSTED','true')
+    monkeypatch.setenv('SIMULATE_PICO','true')
+    monkeypatch.setenv('VISION_ENABLED','false')
+    with TestClient(app) as client:
+        with client.websocket_connect('/ws/game') as one, client.websocket_connect('/ws/game') as two:
+            one.receive_json();two.receive_json()
+            one.send_json({'command':'VISION,P1,DUCK_ON'})
+            until(one,lambda s:s['flight']['players'][0]['duck'])
+            one.send_json({'command':'FLIGHT,P1,DUCK_OFF'})
+            assert one.receive_json()['flight']['players'][0]['duck']
+            assert not two.receive_json()['flight']['players'][0]['duck']
+            one.send_json({'command':'VISION,P1,DUCK_OFF'})
+            until(one,lambda s:not s['flight']['players'][0]['duck'])

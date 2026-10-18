@@ -12,6 +12,7 @@ def fly(g,seconds=3):
 def test_thrust_translates_and_selection_requires_approach():
     g=FlightGame();g.command('FLIGHT,LAUNCH');advance(g,5.1)
     assert g.phase=='NAVIGATION' and g.target() is None
+    g.ship=[0.,14.,-15.] # Start the Saturn approach independently of Earth departure.
     before=g.ship[:];distance=g.targets()[1]['distance'];fly(g)
     assert g.ship[2]<before[2]-50 and g.targets()[1]['distance']<distance and g.target()=='SATURN'
     g.command('FLIGHT,P1,AXIS,1,1');g.command('FLIGHT,P2,AXIS,0,1');advance(g,.2)
@@ -26,7 +27,7 @@ def test_axis_validation():
 def test_select_brief_mission_and_reset(monkeypatch):
     monkeypatch.delenv('GEMINI_API_KEY',raising=False)
     async def run():
-        g=FlightGame();g.command('FLIGHT,LAUNCH');advance(g,5.1);fly(g)
+        g=FlightGame();g.command('FLIGHT,LAUNCH');advance(g,5.1);g.ship=[0.,14.,-15.];fly(g)
         g.command('FLIGHT,P2,SELECT');assert g.phase=='NAVIGATION'
         g.command('FLIGHT,P1,SELECT');assert g.phase=='TRAVEL'
         await g.task;advance(g,4.1);assert g.phase=='BRIEFING'
@@ -78,10 +79,10 @@ def test_expiry_15_seconds():
 def test_pilot_turn_and_helm_level_are_separate():
     g=FlightGame();g.transition('NAVIGATION')
     g.command('FLIGHT,P1,AXIS,0,1');advance(g,.2)
-    assert g.players[0]['yaw']>0 and g.ship[1]==14 and g.ship[2]==0
+    assert g.players[0]['yaw']>0 and g.ship[1]==50 and g.ship[2]==-165
     yaw=g.players[0]['yaw']
     g.command('FLIGHT,P1,AXIS,0,0');g.command('FLIGHT,P2,AXIS,1,-1');advance(g,.2)
-    assert g.players[0]['yaw']==yaw and g.roll>0 and g.ship[1]==14
+    assert g.players[0]['yaw']==yaw and g.roll>0 and g.ship[1]==50
 
 
 def test_every_planet_selectable_and_wraparound():
@@ -357,3 +358,12 @@ def test_reversing_after_forward_thrust_changes_signed_speed():
     for _ in range(20):
         g.command('FLIGHT,P1,AXIS,-1,0');g.tick(.05)
     assert g.speed<0
+
+def test_earth_departure_is_above_earth_and_can_accelerate():
+    g=FlightGame();earth=next(t for t in g.targets() if t['planet']=='EARTH')
+    assert g.ship[0]==earth['position'][0]
+    assert g.ship[1]-earth['position'][1]>30
+    g.command('FLIGHT,LAUNCH');advance(g,5.1)
+    for _ in range(30):
+        g.command('FLIGHT,P1,AXIS,1,0');g.tick(.05)
+    assert g.speed>25 and not g.thrust_blocked

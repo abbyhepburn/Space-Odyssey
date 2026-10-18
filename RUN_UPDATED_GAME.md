@@ -36,3 +36,8 @@ If an axis is backwards, set the relevant sign to -1 in backend/.env and restart
 Quizzes are excluded from generation. Gemini chooses supported action mechanics, names, briefings and encounter patterns; Python validates movement rules, 15-second rounds and scoring. Ground/ring body courses have a three-second ready countdown and four spaced hazards with advance cues. Ground/ring/orbital shortcut buttons are available in each planet briefing.
 
 For hosting and domain setup, read DEPLOY.md.
+
+## Website camera (no Python camera process needed)
+Open the website in regular Chrome, not an embedded/in-app browser. Click **Open motion camera**, keep the popup on the laptop, click **Enable camera**, and allow camera access. P1 stands in the left half of the mirrored preview; P2 in the right. Shoulder movement triggers jump/duck without a calibration screen. Only movement events leave the device. Browser tracking requires downloading the pinned MediaPipe runtime/model.
+
+For USB remotes alongside browser camera, run the existing launcher with `--no-camera --cloud https://spaceodyssey.work --serial YOUR_PICO_PORT` and paste the game's pairing code. Do not run the Python camera simultaneously. The Python camera remains an alternative if the browser camera is unsupported. Actual two-person tracking and physical remotes still require on-device testing.

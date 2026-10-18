@@ -331,7 +331,7 @@ class FlightGame:
         # Keyboard, webcam and two eventual ESP32 remotes all use these same events.
         self.last_actions=[{},{}];self.sync_timestamps={};self.last_sync=-10.
         self.duck_sources=[set(),set()];self.jump_at=[-100.,-100.];self.flick_at=[-100.,-100.];self.total_scores=[0,0]
-        self.ship=[0.,14.,0.];self.roll=0.;self.speed=0.;self.thrust_blocked=False;self.travel=0.;self.team_score=0;self.health=100;self.boost=0.;self.boost_cooldown=0.;self.sync_effect=''
+        self.ship=[-55.,50.,-165.];self.roll=0.;self.speed=0.;self.thrust_blocked=False;self.travel=0.;self.team_score=0;self.health=100;self.boost=0.;self.boost_cooldown=0.;self.sync_effect=''
         self.inspected=None;self.transfer_from=[0.,0.,0.];self.obstacles=[];self.winner='NONE';self.event='READY';self.event_id=0;self.damage_flash=0.
     def emit(self,text):self.event=text;self.event_id+=1
     def transition(self,phase):self.phase=phase;self.age=0.
@@ -528,7 +528,7 @@ class FlightGame:
     def start_mission(self):
         self.transition('MISSION');self.last_actions=[{},{}];self.sync_timestamps={};self.last_sync=-10.;self.health=100;self.boost=0;self.boost_cooldown=0;self.team_score=0;self.sync_effect=''
         self.jump_at=[-100.,-100.];self.flick_at=[-100.,-100.]
-        for i,p in enumerate(self.players):p.update(x=0.,y=0.,distance=0.,health=100,score=0,jump=0.,flick=0.,duck=bool(self.duck_sources[i]),samples=0,chargers=0,selection=1,feedback='',feedback_until=0.)
+        for i,p in enumerate(self.players):p.update(x=0.,y=0.,distance=0.,health=100,score=0,jump=0.,flick=0.,duck=bool(self.duck_sources[i]),samples=0,chargers=0,selection=1,streak=0,feedback='',feedback_until=0.)
         rng=random.Random(self.mission.name+str(self.generation));self.obstacles=[]
         if self.mission.game_type=='SCIENCE_QUIZ':
             # Five true science prompts: the final prompt appears near second 13
@@ -569,7 +569,7 @@ class FlightGame:
         self.boost=max(0.,self.boost-dt);self.boost_cooldown=max(0.,self.boost_cooldown-dt)
         axes=self.active_axes()
         if self.phase=='LAUNCH':
-            self.ship[1]=14.;self.ship[2]=-self.age*3
+            self.ship[1]=50.;self.ship[2]=-165.-self.age*3
             if self.age>=5:self.transition('NAVIGATION');self.emit('P1 · FORWARD / BACK / TURN · P2 · LEVEL THE SHIP')
         if self.phase=='COUNTDOWN' and self.age>=COUNTDOWN_SECONDS:self.start_mission()
         if self.phase=='NAVIGATION':
@@ -655,10 +655,12 @@ class FlightGame:
                 p['feedback']='MISSED' if hit and self.boost<=0 else 'CLEARED +10'
                 p['feedback_until']=self.age+1.2
                 if hit and self.boost<=0:
-                    p['health']=max(0,p['health']-8);self.damage_flash=.35;self.emit(f'P{i+1} · '+('FLICK UP!' if o['kind']=='RIDGE' else 'JUMP THE GAP!' if o['kind']=='PIT' else 'JUMP!' if o['kind']=='HURDLE' else 'TAKE COVER!' if o['kind']=='STORM' else 'DUCK!' if o['kind']=='GATE' else 'WATCH THE ROCKS!'))
+                    p['streak']=0;p['health']=max(0,p['health']-8);self.damage_flash=.35;self.emit(f'P{i+1} · '+('FLICK UP!' if o['kind']=='RIDGE' else 'JUMP THE GAP!' if o['kind']=='PIT' else 'JUMP!' if o['kind']=='HURDLE' else 'TAKE COVER!' if o['kind']=='STORM' else 'DUCK!' if o['kind']=='GATE' else 'WATCH THE ROCKS!'))
                 else:
                     points=self._points(10,o['event_at'])
-                    p['score']+=points;self.emit(f'P{i+1} · +{points}!')
+                    p['streak']=p.get('streak',0)+1
+                    bonus=min(15,(p['streak']-1)*3);points+=bonus
+                    p['score']+=points;p['feedback']=f"{p['streak']} IN A ROW +{points}";self.emit(f'P{i+1} · +{points}!')
         self.team_score=sum(p['score'] for p in self.players)  # backwards-compatible total only
         self.health=min(p['health'] for p in self.players)
         if self.age>=self.mission.time_limit_s:

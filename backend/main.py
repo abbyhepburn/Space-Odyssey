@@ -56,6 +56,15 @@ class Engine:
         else: raise ValueError('Pico is disconnected')
 
     def control(self, command):
+        if command.startswith('VISION,'):
+            parts=command.split(',')
+            if len(parts)!=3 or parts[1] not in ('P1','P2') or parts[2] not in ('JUMP','DUCK_ON','DUCK_OFF'):
+                raise ValueError('Invalid camera event')
+            self.external_camera_last=time.monotonic();self.external_camera_expired=False
+            self.status['vision']='Browser camera connected'
+            self.flight.command(f'FLIGHT,{parts[1]},{parts[2]}',source='vision')
+            return
+
         # Developer can emulate a remote over local WebSocket/API for tests.
         # The same REMOTE message format is accepted from the Pico USB reader.
         if command.startswith('REMOTE,'):
