@@ -70,6 +70,7 @@ static void accept(const Pending& entry) {
   case 'B':actionLine(e.player,"SELECT");break;
   case 'S':actionLine(e.player,"SHAKE");break;
   case 'F':actionLine(e.player,"UPWARD_FLICK");break;
+  case 'G':actionLine(e.player,"JUMP");break;
  }
 }
 

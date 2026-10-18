@@ -5,7 +5,7 @@ struct ControllerPacket { uint8_t player, sequence; char action; bool snapshot; 
 inline bool decodeController(const uint8_t* data, size_t size, ControllerPacket& out) {
   if (!data || (size!=7 && size!=10) || data[0]!=255 || data[1]!=255 || data[2]!='A' || data[3]!='L' || (data[4]!='1' && data[4]!='2')) return false;
   const char a=(char)data[5];
-  const char* valid="ISFLRCJKUDZBb";bool found=false;
+  const char* valid="ISFLRCJKUDZBbG";bool found=false;
   for (const char* p=valid;*p;++p)if(*p==a)found=true;
   if(!found)return false;
   out={uint8_t(data[4]-'1'),data[6],a,size==10,0,0,0};
@@ -40,6 +40,6 @@ struct Player {
    case 'L':tilt=-100;break;case 'R':tilt=100;break;case 'C':tilt=0;break;
   }
   // First sight/reconnect restores axes, but never replays an old gesture.
-  return !reconnect && (e.action=='B'||e.action=='S'||e.action=='F')?e.action:0;
+  return !reconnect && (e.action=='B'||e.action=='S'||e.action=='F'||e.action=='G')?e.action:0;
  }
 };

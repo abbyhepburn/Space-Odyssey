@@ -4,7 +4,6 @@ From this repository:
 
 ```sh
 source backend/.venv/bin/activate
-python -m pip install -r backend/requirements-vision.txt
 cd frontend
 npm ci
 npm run build
@@ -12,7 +11,7 @@ cd ..
 python start_game.py --serial /dev/cu.usbmodemYOUR_PICO
 ```
 
-Use `python -m serial.tools.list_ports` to find the Pico port. To test without hardware, set SIMULATE_PICO=true in backend/.env and omit --serial. Close any old backend on port 8000 first, or add --port 8002. The launcher opens the camera separately and serves the built game. Move the game browser to the HDMI monitor; leave the OpenCV window on the laptop. macOS may ask for camera access. Keep both players' shoulders visible, P1 on the left of the mirrored preview, P2 on the right. Tracking starts immediately from visible shoulders. C resets tracking; Q exits the camera. The **Open laptop camera** button can reopen it. See backend/camera-preview.log if it fails.
+Use `python -m serial.tools.list_ports` to find the Pico port. To test without hardware, set SIMULATE_PICO=true in backend/.env and omit `--serial`. Close any old backend on port 8000 first, or add `--port 8002`. The launcher serves the built game; move the game browser to the HDMI monitor. No camera is required.
 
 ## Controllers
 
@@ -29,18 +28,16 @@ REMOTE,P1,SHAKE
 REMOTE,P2,UPWARD_FLICK
 ```
 
-Python owns gameplay; the Pico bridges physical controls. The UI's two cursors show raw joystick readings. Expand diagnostics for packet age/count, last action and effective game axes. USB connected does not imply remote packets are arriving. Input older than 400 ms stops safely. P1 joystick controls thrust/steering in navigation; P2 tilt controls roll. Challenge controls are shown before every round.
+Python owns gameplay; the Pico bridges physical controls. In flight, P1 joystick controls thrust/steering and P2 tilt controls roll. In missions, tilt each remote up to jump and push its joystick forward to duck; normal flight steering remains unchanged. The UI's two cursors show raw joystick readings. Expand diagnostics for packet age/count, last action and effective game axes. USB connected does not imply remote packets are arriving. Input older than 400 ms stops safely.
 
-If an axis is backwards, set the relevant sign to -1 in backend/.env and restart (no reflash): P1_FORWARD_SIGN, P1_STEER_SIGN, P1_TILT_SIGN, P2_FORWARD_SIGN, P2_STEER_SIGN, P2_TILT_SIGN. Defaults are 1. Camera source index can be set with CAMERA_INDEX=0 or another index.
+If an axis is backwards, set the relevant sign to -1 in backend/.env and restart (no reflash): P1_FORWARD_SIGN, P1_STEER_SIGN, P1_TILT_SIGN, P2_FORWARD_SIGN, P2_STEER_SIGN, P2_TILT_SIGN. Defaults are 1.
 
 Quizzes are excluded from generation. Gemini chooses supported action mechanics, names, briefings and encounter patterns; Python validates movement rules, 15-second rounds and scoring. Ground/ring body courses have a three-second ready countdown and four spaced hazards with advance cues. Ground/ring/orbital shortcut buttons are available in each planet briefing.
 
 For hosting and domain setup, read DEPLOY.md.
 
-## Website camera (no Python camera process needed)
-Open the website in regular Chrome, not an embedded/in-app browser. Click **Open motion camera**, keep the popup on the laptop, click **Enable camera**, and allow camera access. P1 stands in the left half of the mirrored preview; P2 in the right. Shoulder movement triggers jump/duck without a calibration screen. Only movement events leave the device. Browser tracking requires downloading the pinned MediaPipe runtime/model.
-
-For USB remotes alongside browser camera, run the existing launcher with `--no-camera --cloud https://spaceodyssey.work --serial YOUR_PICO_PORT` and paste the game's pairing code. Do not run the Python camera simultaneously. The Python camera remains an alternative if the browser camera is unsupported. Actual two-person tracking and physical remotes still require on-device testing.
+## Optional OpenCV camera experiment
+To try local camera tracking, install `backend/requirements-vision.txt` in the Python 3.12 backend environment, confirm `backend/models/pose_landmarker_lite.task` exists, and run `python backend/camera_vision.py --scan` from Terminal. macOS must allow Terminal camera access. The camera tracker is optional and has not been verified with two players; remote tilt-up jump and joystick-forward duck remain the intended controls.
 
 ## Joystick flight
 P1 joystick forward (W or F) moves forward; pull backward (S) to reverse. Altitude stays level. Left/right turns; P2 tilt stabilizes roll. The ship starts beside Earth at the same height. No firmware update needed.

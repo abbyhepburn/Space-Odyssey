@@ -34,8 +34,8 @@ class Engine:
         self.state=vars(State()).copy(); self.queue=asyncio.Queue(maxsize=2048)
         self.cloud_queue=asyncio.Queue(maxsize=128)
         self.clients=set(); self.bridge=None; self.vision=None; self.tasks=[]
-        self.capabilities={'jump':self.simulated,'duck':self.simulated}
-        self.status={'usb':self.simulated,'mode':'SIMULATOR' if self.simulated else 'PICO USB','vision':'Camera not connected','gemini':'Local mission catalog','message':''}
+        self.capabilities={'jump':True,'duck':True}
+        self.status={'usb':self.simulated,'mode':'SIMULATOR' if self.simulated else 'PICO USB','vision':'Remote controls ready','gemini':'Local mission catalog','message':''}
         self.active=None; self.pending=None; self.mission_index=0; self.generating=False; self.epoch=0; self.last_state=0
         self.retry_at=0; self.mission_task=None
 
@@ -59,9 +59,9 @@ class Engine:
         if command.startswith('VISION,'):
             parts=command.split(',')
             if len(parts)!=3 or parts[1] not in ('P1','P2') or parts[2] not in ('JUMP','DUCK_ON','DUCK_OFF'):
-                raise ValueError('Invalid camera event')
+                raise ValueError('Invalid remote action event')
             self.external_camera_last=time.monotonic();self.external_camera_expired=False
-            self.status['vision']='Browser camera connected'
+            self.status['vision']='Remote controls active'
             self.flight.command(f'FLIGHT,{parts[1]},{parts[2]}',source='vision')
             return
 
@@ -178,8 +178,7 @@ class Engine:
         def callback(kind): return lambda *data: loop.call_soon_threadsafe(self.submit,kind,data[0] if len(data)==1 else data)
         if not self.simulated:
             self.bridge=SerialBridge(os.getenv('SERIAL_PORT',''),callback('line'),callback('usb')); self.bridge.start()
-        if os.getenv('VISION_ENABLED','false').lower()=='true':
-            self.vision=VisionWorker(callback('input'),callback('vision')); self.vision.start()
+        # Jump and duck come from the remotes; do not start an OpenCV worker.
         self.tasks=[asyncio.create_task(self.consume()),asyncio.create_task(self.clock())]
         if os.getenv('SPACE_ODYSSEY_HOST_URL'):self.tasks.append(asyncio.create_task(hosted.forward_to_host(self)))
     async def close(self):

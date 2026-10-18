@@ -2,7 +2,7 @@
 
 A first-person planet exploration game with **two-player competitive 15-second mini-games**, a cinematic cockpit launch, real-object discoveries, and short, curated NASA-backed planet facts. Players jointly pilot a ship to a destination, then **compete for individual points** in the planet's mini-game.
 
-The current playable version runs in **computer demonstration mode**: physical joysticks/ESP32 remotes and Mac webcam detection can be connected later via the game's normalized input command layer. No FPGA is needed for the game graphics: your Mac renders the React/Three.js interface to a monitor.
+The playable version supports keyboard controls and the ESP32/Pico remote input path. In missions, tilt a remote up to jump and push its joystick forward to duck. OpenCV camera tracking remains an optional local experiment; it requires macOS camera permission and has not been verified on this laptop. No FPGA is needed for the game graphics: your Mac renders the React/Three.js interface to a monitor.
 
 ## Run on a Mac — two terminals
 
@@ -30,9 +30,9 @@ npm run dev
 
 Open the printed Vite address (usually `http://127.0.0.1:5173`). Its proxy forwards backend traffic to port `8000`. Keep both terminals running. The FastAPI developer documentation, when enabled, is at `http://127.0.0.1:8000/docs`.
 
-### Using an external monitor and laptop camera
+### Using an external monitor
 
-Connect the Mac to the monitor by HDMI/USB-C. Go to **System Settings → Displays → Extend Display**. Move the game browser to the external monitor and use fullscreen. Keep the camera/debug window on the laptop screen. If you later enable the optional `VisionWorker`, install dependencies from `backend/requirements-vision.txt`, provide a MediaPipe `pose_landmarker_lite.task` model with the `POSE_MODEL_PATH` environment variable, and set `VISION_ENABLED=true`, `VISION_DEBUG=true`. **Camera + two-person calibration have not been verified against your webcam**; keyboard controls remain the fallback.
+Connect the Mac to the monitor by HDMI/USB-C. Go to **System Settings → Displays → Extend Display**. Move the game browser to the external monitor and use fullscreen. To try the optional local OpenCV tracker, follow [CAMERA_SETUP_MAC.md](CAMERA_SETUP_MAC.md); the tracker needs camera access and a visible two-player test.
 
 ## Game sequence
 
@@ -53,8 +53,8 @@ Ground missions run only on rocky worlds — Mercury, Venus, Earth and Mars — 
 | Keep spacecraft level | — | J / L or left / right arrows | P2 remote tilt left / right |
 | Select planet or start | E / Enter | — | P1 joystick button |
 | Mission left/right steer or tilt | A / D | Left/right arrows | Each remote's tilt/joystick |
-| Jump | Space | I | OpenCV pose detection |
-| Duck | Hold C | Hold K | OpenCV pose detection |
+| Jump | Space | I | Tilt remote up |
+| Duck | Hold C | Hold K | Push joystick forward |
 | Shake | Q | U | Remote accelerometer shake |
 | Press joystick | E | O | Remote button |
 | Flick upward | R | P | Remote accelerometer flick |
@@ -63,7 +63,7 @@ The production UI displays **physical movements only**, not these keyboard
 shortcuts. Test keys work regardless; append `?debugControls=1` to the local
 browser URL to show test buttons. See [REMOTE_AND_KEYBOARD_TESTING.md](REMOTE_AND_KEYBOARD_TESTING.md).
 
-The game backend receives normalized strings such as `FLIGHT,P1,JUMP`, `FLIGHT,P2,DUCK_ON`, `FLIGHT,P1,SHAKE`, `FLIGHT,P2,UPWARD_FLICK` and `FLIGHT,P1,AXIS,1,0`. Hardware input bridging is a **future integration**. Do not claim it works with the physical remotes yet.
+The game backend receives normalized strings such as `FLIGHT,P1,JUMP`, `FLIGHT,P2,DUCK_ON`, `FLIGHT,P1,SHAKE`, `FLIGHT,P2,UPWARD_FLICK` and `FLIGHT,P1,AXIS,1,0`. Tilt-up jump and joystick-forward duck require the updated remote firmware and a live hardware check.
 
 ## Different mini-games
 
@@ -105,7 +105,7 @@ The backend suite passed **78 tests** in this review environment; **10 JavaScrip
 - `frontend/src/components/SurfaceLandscape.jsx` — rocky planet ground scenes.
 - `frontend/src/components/CockpitGame.jsx` — cockpit, missions, 3D satellites and star objects.
 - `frontend/src/components/SpaceOdysseyLaunch.jsx` + `.css` — cinematic opening and skippable startup.
-- `backend/vision.py` — optional MediaPipe two-player pose worker with debug preview (requires configuration/testing).
+- `backend/camera_vision.py` — optional local OpenCV/MediaPipe camera tracker (requires camera permission and live testing).
 
 Local scores currently reset when the game restarts. Persistent per-player leaderboards/login are not part of this update.
 

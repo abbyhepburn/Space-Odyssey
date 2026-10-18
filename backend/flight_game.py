@@ -1,4 +1,4 @@
-"""Shared game authority for keyboard testing, future remotes and OpenCV."""
+"""Shared game authority for keyboard testing and physical remotes."""
 import asyncio
 import math
 import os
@@ -86,7 +86,7 @@ MOVES={'SURFACE_RUN':('JUMP','DUCK'),'CRATER_LEAP':('JUMP','FLICK'),'SAMPLE_HUNT
 SCIENCE_MODES=frozenset(('SCIENCE_QUIZ','SAMPLE_HUNT','STORM_SHELTER','RELAY_REPAIR','BEACON_RELAY'))
 ACTION_MODES=frozenset(MODES)-SCIENCE_MODES
 
-INSTRUCTIONS={'PRESS':'Press your remote button when a sample or beacon is near.','FLICK':'Flick your remote upward to clear the tall gaps.','TILT':'Tilt your remote left/right to move toward each sample.','STEER':'Move left or right to avoid the rocks.','JUMP':'Jump over the low barriers.','DUCK':'Duck under the high barriers.','SHAKE':'Shake your remote when the target is in range.'}
+INSTRUCTIONS={'PRESS':'Press your remote button when a sample or beacon is near.','FLICK':'Flick your remote upward to clear the tall gaps.','TILT':'Tilt your remote left/right to move toward each sample.','STEER':'Move left or right to avoid the rocks.','JUMP':'Tilt your remote up to jump over the low barriers.','DUCK':'Push the joystick forward to duck under the high barriers.','SHAKE':'Shake your remote when the target is in range.'}
 
 class Movement(BaseModel):
     model_config=ConfigDict(extra='forbid',strict=True)
@@ -171,11 +171,11 @@ def eligible_gemini_modes(planet, recent=(), global_recent=(), forced_mode=None)
 MODE_RULES={
     'SCIENCE_QUIZ':'Live fact challenge: tilt joystick/remote among A, B, C and PRESS to answer five verified NASA questions. The backend chooses the correct answers.',
     'SAMPLE_HUNT':'First-person rocky surface research: TILT to reach 3 samples and PRESS to collect them.',
-    'STORM_SHELTER':'Rocky surface survival: camera DUCK through a dust front and SHAKE to restart field generators.',
+    'STORM_SHELTER':'Push the joystick forward to duck beneath a dust front; shake to restart field generators.',
     'RELAY_REPAIR':'Orbital engineering: TILT to align with damaged relay hardware, SHAKE to repair.',
     'BEACON_RELAY':'Orbital signal chase: STEER toward separate beacons, PRESS to activate.',
     'SURFACE_RUN':'First-person rocky terrain hurdles: jump low obstacles, duck high obstacles.',
-    'CRATER_LEAP':'First-person crater crossing: camera JUMP over pits, FLICK upward at ledges.',
+    'CRATER_LEAP':'First-person crater crossing: tilt your remote up to jump over pits; flick upward at ledges.',
     'ASTEROID_DODGE':'Space rock survival: STEER to evade; SHAKE to break oncoming debris.',
     'RING_RACE':'Saturn orbital ring course: JUMP and DUCK past icy obstacles (not on Saturn surface).',
     'ORBIT_SLALOM':'Fast orbital steering contest: STEER to avoid moving barriers.',
@@ -225,7 +225,7 @@ async def generate_game(planet,recent=(),recent_names=(),global_recent=(),style_
 
     The server owns controls, scoring, challenge duration, curated science and
     planet restrictions. This means AI-generated missions are *playable* with
-    both remotes/OpenCV and can be previewed with the keyboard.
+    both physical remotes and can be previewed with the keyboard.
     """
     allowed=eligible_gemini_modes(planet,recent,global_recent,forced_mode)
     lesson=lesson or choose_planet_fact(planet)
@@ -247,7 +247,7 @@ async def generate_game(planet,recent=(),recent_names=(),global_recent=(),style_
         from google.genai import types
         specifications='\n'.join(f'- {m}: {MODE_RULES[m]} Controls: {", ".join(MOVES[m])}.' for m in allowed)
         prompt=f"""Create ONE lively, original 15-second head-to-head SPACE ODYSSEY challenge for the planet {planet}.
-        Two players compete individually, with one joystick/remote each and optional OpenCV jump and duck.
+        Two players compete individually, with one remote each. Tilt up to jump and push the joystick forward to duck.
         You CHOOSE THE PLAYABLE GAME FAMILY from ONLY these implemented modes:
         {specifications}
         Select game_type EXACTLY from: {allowed}.
@@ -255,8 +255,7 @@ async def generate_game(planet,recent=(),recent_names=(),global_recent=(),style_
         objective meaningful: science modes collect samples, restore research relays or answer real questions;
         arcade modes reward successful movement, not empty button pressing. The real mechanics shown above
         cannot be changed. Player 1 and Player 2 must have the same fair objective.
-        Remote controls are joystick steering, physical tilt, button press, shake, upward flick; OpenCV tracks
-        jumping and ducking. Never ask for extra input devices, voice, mouse, hovering, lasers or new controls.
+        Remote controls are joystick steering, physical tilt up for jump, forward joystick for duck, button press, shake and upward flick. Never ask for extra input devices, voice, mouse, hovering, lasers or new controls.
         Curated NASA fact for the educational briefing (you may quote this fact, no invented claims):
         {lesson['fact']}
         Use the real fact as story inspiration where it fits. Do not pretend fictional missions are historical
@@ -423,7 +422,13 @@ class FlightGame:
             throttle,steer,tilt=map(float,parts[3:])
             if not all(math.isfinite(v) and -1<=v<=1 for v in (throttle,steer,tilt)):raise ValueError('Invalid sensor state')
             self.remote_raw[i]=[throttle,steer,tilt];self.remote_packets[i]+=1
-            signs=self.controller_signs[i];self.remote_axes[i]=[throttle*signs[0],steer*signs[1]];self.remote_tilt[i]=tilt*signs[2];self.remote_input_at[i]=self.world_time;return
+            signs=self.controller_signs[i];forward=throttle*signs[0];self.remote_axes[i]=[forward,steer*signs[1]];self.remote_tilt[i]=tilt*signs[2];self.remote_input_at[i]=self.world_time
+            # During missions the forward stick is a held duck control. Keep
+            # hysteresis so small center noise does not flicker DUCK on/off.
+            if self.phase=='MISSION' and (forward>=.35 or ('remote' in self.duck_sources[i] and forward>.20)):
+                self.duck_sources[i].add('remote')
+            else:self.duck_sources[i].discard('remote')
+            p['duck']=bool(self.duck_sources[i]);return
         if action=='AXIS' and len(parts)==5:
             x,y=map(float,parts[3:])
             if not all(math.isfinite(v) and -1<=v<=1 for v in (x,y)):raise ValueError('Axes must be normalized')

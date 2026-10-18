@@ -1,4 +1,4 @@
-"""Launch local game + laptop camera, optionally paired to spaceodyssey.work."""
+"""Launch local game, optionally paired to spaceodyssey.work."""
 import argparse
 import getpass
 import os
@@ -15,7 +15,6 @@ def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('--serial',help='Pico USB port, e.g. /dev/cu.usbmodem123')
     parser.add_argument('--cloud',help='https://spaceodyssey.work or your Render URL')
-    parser.add_argument('--no-camera',action='store_true')
     parser.add_argument('--port',type=int,default=8000)
     args=parser.parse_args()
     from dotenv import load_dotenv
@@ -30,8 +29,6 @@ def main():
         urllib.request.urlopen(endpoint+'/health',timeout=1)
     except Exception:pass
     else:raise SystemExit(f'Port {args.port} already has a game server. Stop it first or choose --port 8002.')
-    if not args.no_camera:
-        subprocess.run([sys.executable,str(ROOT/'backend'/'download_pose_model.py')],check=True)
     server=subprocess.Popen([sys.executable,'-m','uvicorn','main:app','--host','127.0.0.1','--port',str(args.port)],cwd=ROOT/'backend',env=env)
     try:
         for _ in range(60):
@@ -39,12 +36,8 @@ def main():
             try:urllib.request.urlopen(endpoint+'/health',timeout=.5);break
             except Exception:time.sleep(.2)
         else:raise RuntimeError('Backend startup timed out')
-        if not args.no_camera:
-            request=urllib.request.Request(endpoint+'/api/vision/start',method='POST')
-            try:urllib.request.urlopen(request,timeout=15).read()
-            except Exception as exc:print('Camera could not start. Use Open laptop camera in the game. Reason:',type(exc).__name__)
         if not args.cloud:webbrowser.open(endpoint)
-        print('Keep this window open. Camera preview stays on this laptop; move the game browser to the HDMI monitor.')
+        print('Keep this window open while the game runs. Move the game browser to the HDMI monitor if needed.')
         if args.cloud:print('Paired mode: keep the online game open. Refreshing the website creates a new pairing code.')
         server.wait()
     except KeyboardInterrupt:pass

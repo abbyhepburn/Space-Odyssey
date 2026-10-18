@@ -26,7 +26,7 @@ async def browser_game(ws, engine_factory):
     await ws.accept()
     e=engine_factory();e.simulated=True;e.sim=None;e.flight.simulated=True
     token=secrets.token_urlsafe(24)
-    e.status.update(mode='HOSTED',usb=False,pairing_code=token,vision='Pair your laptop to use camera and remotes')
+    e.status.update(mode='HOSTED',usb=False,pairing_code=token,vision='Pair your laptop to use remote controllers')
     sessions[token]=e;e.clients.add(ws)
     e.tasks=[asyncio.create_task(e.consume()),asyncio.create_task(e.clock())]
     try:
@@ -74,7 +74,7 @@ async def laptop_bridge(ws):
                     # inside this paired browser's game, never globally.
                     e.flight.controller_signs=[list(row) for row in signs]
                 e.status['usb']=value.get('usb') is True
-                e.status['vision']=str(value.get('vision','Camera not connected'))[:160]
+                e.status['vision']=str(value.get('vision','Remote controls ready'))[:160]
                 e.external_camera_last=time.monotonic();e.external_camera_expired=False
             else:continue
     except (WebSocketDisconnect,RuntimeError,asyncio.TimeoutError,json.JSONDecodeError):pass
