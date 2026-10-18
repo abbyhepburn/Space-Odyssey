@@ -56,3 +56,19 @@ def test_browser_camera_is_scoped_to_own_game_and_keyboard_does_not_release_it(m
             assert not two.receive_json()['flight']['players'][0]['duck']
             one.send_json({'command':'VISION,P1,DUCK_OFF'})
             until(one,lambda s:not s['flight']['players'][0]['duck'])
+
+
+def test_pairing_applies_laptop_axis_signs_to_only_its_game(monkeypatch):
+    monkeypatch.setenv('SPACE_ODYSSEY_HOSTED','true')
+    monkeypatch.setenv('SIMULATE_PICO','true')
+    with TestClient(app) as client:
+        with client.websocket_connect('/ws/game') as one, client.websocket_connect('/ws/game') as two:
+            code=one.receive_json()['status']['pairing_code'];other=two.receive_json()['status']['pairing_code']
+            with client.websocket_connect('/ws/bridge') as bridge:
+                bridge.send_json({'pairing_code':code});assert bridge.receive_json()['paired']
+                bridge.send_json({'kind':'status','data':{'usb':True,'controller_signs':[[-1,1,1],[1,1,1]]}})
+                bridge.send_json({'kind':'line','data':'REMOTE,P1,STATE,0.75,0.2,0'})
+                s=until(one,lambda s:s['flight']['controllers'][0]['fresh'])
+                assert s['flight']['controllers'][0]['raw']==[.75,.2,0.]
+                assert s['flight']['controllers'][0]['effective']==[-.75,.2]
+                assert hosted.sessions[other].flight.controller_signs[0][0]==1

@@ -66,6 +66,13 @@ async def laptop_bridge(ws):
             elif kind=='input' and isinstance(value,str) and value in {f'INPUT,P{i},{a}' for i in (1,2) for a in ('JUMP','DUCK_ON','DUCK_OFF')}:
                 e.submit('input',value)
             elif kind=='status' and isinstance(value,dict):
+                signs=value.get('controller_signs')
+                if (isinstance(signs,list) and len(signs)==2 and all(
+                    isinstance(row,list) and len(row)==3 and all(type(v) in (int,float) and v in (-1,1) for v in row)
+                    for row in signs)):
+                    # Keep raw telemetry intact; apply laptop .env inversions
+                    # inside this paired browser's game, never globally.
+                    e.flight.controller_signs=[list(row) for row in signs]
                 e.status['usb']=value.get('usb') is True
                 e.status['vision']=str(value.get('vision','Camera not connected'))[:160]
                 e.external_camera_last=time.monotonic();e.external_camera_expired=False
@@ -103,7 +110,7 @@ async def forward_to_host(engine):
                     now=time.monotonic()
                     if now-getattr(engine,'cloud_status_at',0)>.5:
                         engine.cloud_status_at=now
-                        await ws.send(json.dumps({'kind':'status','data':{'usb':engine.status['usb'],'vision':engine.status['vision']}}))
+                        await ws.send(json.dumps({'kind':'status','data':{'usb':engine.status['usb'],'vision':engine.status['vision'],'controller_signs':engine.flight.controller_signs}}))
         except asyncio.CancelledError:raise
         except Exception:
             engine.status['cloud']='Not paired — check code and connection'
