@@ -89,3 +89,33 @@
 @media(max-width:700px){.orbital-stage{width:max(100vw,140vh);height:max(71.43vw,100vh)}.so-launch--intro .so-launch__boot{max-width:60%;top:85px}.so-launch--intro .so-launch__boot-index{font-size:8px;letter-spacing:1px}}
 
 .flight-telemetry{position:absolute;left:27%;top:65%;color:#8ef5e7;font:clamp(10px,1vw,18px) monospace;line-height:1.8;transform:perspective(500px) rotateX(15deg);text-shadow:0 0 10px #49bdff}.so-launch--menu .so-launch__earth{animation:orbital-drift 24s ease-in-out infinite alternate}.so-launch--menu .so-launch__nebula{animation:nebula-drift 35s linear infinite alternate}@keyframes orbital-drift{to{transform:translate(2%,4%) rotate(4deg)}}@keyframes nebula-drift{to{transform:scale(1.15) translateX(-3%)}}.orbital-screen-light{animation:instrument-pulse 1.2s ease-in-out infinite alternate}@keyframes instrument-pulse{to{filter:blur(10px);opacity:.12}}
+
+/* The intro uses one steady cockpit view and a small, functional launch panel. */
+.orbital-cinematic{background:#05080b}
+.orbital-cinematic::before{content:"";position:absolute;inset:0;z-index:1;background:linear-gradient(90deg,#05090fd9 0%,#05090f7a 31%,transparent 62%),linear-gradient(0deg,#05070dcc 0%,transparent 35%);pointer-events:none}
+.orbital-backdrop{object-fit:cover;filter:brightness(.82) saturate(.86)}
+.orbital-power-shadow{z-index:1;inset:48% 0 0;background:linear-gradient(180deg,transparent,#03070be0)}
+.orbital-switch-cue{position:absolute;z-index:2;left:81%;top:69%;width:48px;height:48px;border:1px solid #ecd0a2;border-radius:50%;display:grid;place-items:center;opacity:var(--cue-opacity,0);transform:scale(.92);transition:opacity .5s ease,transform .5s ease;pointer-events:none}
+.orbital-switch-cue--active{transform:scale(1)}
+.orbital-switch-cue i{width:8px;height:8px;border:1px solid #f4d6a0;border-radius:50%;background:#f4d6a055;box-shadow:0 0 12px #f4d6a066}
+.orbital-switch-cue span{position:absolute;left:57px;top:16px;width:125px;color:#f2dfbd;font:600 8px 'DM Sans',sans-serif;letter-spacing:1.4px;text-shadow:0 1px 5px #000}
+.so-launch--intro .so-launch__boot{top:50%;bottom:auto;left:clamp(24px,5vw,76px);width:min(390px,37vw);max-width:none;transform:translateY(-50%);padding:24px 24px 20px;background:#08111bd9;border:1px solid #d5d0c52b;border-left:2px solid #c8a979;box-shadow:0 18px 48px #0005;backdrop-filter:blur(8px);pointer-events:auto}
+.so-launch--intro .so-launch__boot-index{font-size:9px;letter-spacing:1.7px;color:#c7b28f}
+.so-launch--intro .so-launch__boot-index span{padding:0 7px;color:#807965}
+.so-launch--intro .so-launch__boot h2{font:500 clamp(28px,3vw,40px)/1.05 'DM Sans',sans-serif;letter-spacing:-1.1px;margin:17px 0 8px;color:#f1eee8}
+.so-launch--intro .so-launch__boot p{font-size:13px;line-height:1.55;color:#c2c6c9;margin:0 0 18px}
+.launch-checklist{list-style:none;margin:0;padding:2px 0 0;border-top:1px solid #d7d1c426}
+.launch-checklist li{min-height:38px;display:grid;grid-template-columns:25px 1fr auto;align-items:center;gap:9px;border-bottom:1px solid #d7d1c41c;color:#9ba4aa;font-size:11px;letter-spacing:.1px}
+.launch-checklist__mark{font:10px 'DM Sans',sans-serif;color:#7e898f}
+.launch-checklist b{font-size:8px;letter-spacing:1px;font-weight:600;color:#768187}
+.launch-checklist li.is-current{color:#f0e8d7}
+.launch-checklist li.is-current .launch-checklist__mark{color:#d7b986}
+.launch-checklist li.is-current b{color:#d7b986}
+.launch-checklist li.is-complete .launch-checklist__mark,.launch-checklist li.is-complete b{color:#9ebaa7}
+.launch-progress{height:2px;margin-top:19px;background:#d2d7d71f;overflow:hidden}
+.launch-progress span{display:block;height:100%;background:#d4b98c;transition:width .35s linear}
+.launch-progress__caption{display:flex;justify-content:space-between;margin-top:7px;color:#858e94;font-size:8px;letter-spacing:1.1px}
+.so-launch--intro .so-launch__skip{position:static;display:block;margin:17px 0 0 auto;padding:8px 0;border:0;color:#c8cdd0;font-size:9px;letter-spacing:1px;background:transparent}
+.so-launch--intro .so-launch__skip:hover{color:#fff;background:transparent}
+@media(max-width:700px){.orbital-cinematic::before{background:linear-gradient(180deg,#05090f99,transparent 36%,#05070dc9 100%)}.orbital-switch-cue{left:80%;top:68%;width:38px;height:38px}.orbital-switch-cue span{left:-94px;top:43px;text-align:right}.so-launch--intro .so-launch__boot{top:auto;bottom:18px;left:16px;width:min(390px,calc(100vw - 32px));padding:18px 18px 14px;transform:none}.so-launch--intro .so-launch__boot h2{font-size:28px;margin:11px 0 5px}.so-launch--intro .so-launch__boot p{font-size:12px;margin-bottom:11px}.launch-checklist li{min-height:32px}.launch-progress{margin-top:12px}.so-launch--intro .so-launch__skip{margin-top:10px}}
+@media(prefers-reduced-motion:reduce){.orbital-stage,.orbital-switch-cue,.launch-progress span{transition:none!important}}

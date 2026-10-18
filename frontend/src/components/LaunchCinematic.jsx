@@ -2,17 +2,14 @@ import React from 'react';
 const smooth=(t,a,b)=>{const x=Math.max(0,Math.min(1,(t-a)/(b-a)));return x*x*(3-2*x)};
 export default function LaunchCinematic({elapsed}){
  const t=elapsed/1000;
- const reach=smooth(t,.5,2.5)*(1-smooth(t,4,6));
  const burn=smooth(t,5,8),power=smooth(t,2.4,3.5);
- return <div className="launch-cinematic orbital-cinematic" aria-label="First-person astronaut powers the spacecraft above Earth's curved horizon, then begins an orbital departure">
-  <div className="orbital-stage" style={{transform:`translate(-50%,-50%) translate(${Math.sin(t*42)*burn*1.3}px,${Math.cos(t*31)*burn*1.1}px)`}}>
+ const switchCue=smooth(t,1.4,2.1)*(1-smooth(t,3.3,4.1));
+ return <div className="launch-cinematic orbital-cinematic" aria-label="A crew member checks the launch control from inside the cockpit">
+  <div className="orbital-stage" style={{transform:`translate(-50%,-50%) translate(0,${-burn*.35}%)`}}>
    <img className="orbital-backdrop" src="/art/orbital-cockpit.png" alt=""/>
-   <div className="orbital-window"><img src="/art/orbital-cockpit.png" alt="" style={{transform:`translate(${Math.sin(t*.4)*1.2}%,${burn*14}%) scale(${1.12-burn*.1})`}}/></div>
    <div className="orbital-power-shadow" style={{opacity:.65*(1-power)}}/>
-   {[24,49,68].map((left,i)=><div key={left} className="orbital-screen-light" style={{left:`${left}%`,opacity:smooth(t,2.5+i*.3,3+i*.3)*.25}}/>)}
-   <div className="orbital-ignition" style={{opacity:power}}/>
-   <img className="orbital-glove" src="/art/astronaut-glove.png" alt="Astronaut's gloved hand reaching for the ignition switch" style={{transform:`translate(${(1-reach)*38}%,${(1-reach)*85}%) rotate(${(1-reach)*12}deg)`,opacity:smooth(t,.1,.7)}}/>
-   <div className="flight-telemetry" style={{opacity:power}}>ALT {Math.round(408+burn*92)} KM<br/>VELOCITY {(7.66+burn*2.4).toFixed(2)} KM/S<br/>ENGINE {Math.round(burn*100)}%</div><div className="orbital-engine-light" style={{opacity:burn*.3}}/>
+   <div className={`orbital-switch-cue ${switchCue>.01?'orbital-switch-cue--active':''}`} style={{'--cue-opacity':switchCue}} aria-hidden="true"><i/><span>LAUNCH CONTROL</span></div>
+   <div className="orbital-engine-light" style={{opacity:burn*.16}}/>
   </div>
   <div className="orbital-vignette"/>
  </div>;
